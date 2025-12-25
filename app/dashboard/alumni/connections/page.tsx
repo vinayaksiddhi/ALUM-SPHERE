@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const mockConnectedStudents = [
   {
     id: "1",
-    name: "Alex Kumar",
+    name: "harshit raj",
     year: "3rd Year",
     department: "Computer Science",
     college: "MIT",
