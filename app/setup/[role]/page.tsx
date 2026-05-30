@@ -21,10 +21,9 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { useRouter, useParams } from "next/navigation"
-
-// interface SetupPageProps {
-//   params: { role: "student" | "alumni" }
-// }
+import { useEffect } from "react"
+import { syncUser } from "@/app/actions/sync-user"
+import { saveProfile } from "@/app/actions/save-profile"
 
 export default function SetupPage() {
   const router = useRouter()
@@ -33,6 +32,7 @@ export default function SetupPage() {
 
   const [currentStep, setCurrentStep] = useState(1)
   const [totalSteps] = useState(4)
+  const [loading, setLoading] = useState(true)
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -54,6 +54,34 @@ export default function SetupPage() {
     expertise: [] as string[],
     willingToMentor: [] as string[],
   })
+
+  useEffect(() => {
+    async function loadUser() {
+      if (!role) return
+      setLoading(true)
+      const res = await syncUser()
+      if (res.success && res.profile) {
+        const p = res.profile
+        setFormData((prev) => ({
+          ...prev,
+          fullName: p.name || "",
+          email: p.email || "",
+          profilePhoto: p.avatar_url || "",
+          bio: p.student_profiles?.biography || p.alumni_profiles?.biography || "",
+          college: p.student_profiles?.college || p.alumni_profiles?.college || "",
+          department: p.student_profiles?.department || p.alumni_profiles?.department || "",
+          graduationYear: p.student_profiles?.passing_year?.toString() || "",
+          passingYear: p.alumni_profiles?.passing_year?.toString() || "",
+          company: p.alumni_profiles?.company || "",
+          jobRole: p.alumni_profiles?.job_title || "",
+          skills: p.student_profiles?.skills || [],
+          expertise: p.alumni_profiles?.expertise || [],
+        }))
+      }
+      setLoading(false)
+    }
+    loadUser()
+  }, [role])
 
   const [newTag, setNewTag] = useState("")
 
@@ -86,21 +114,26 @@ export default function SetupPage() {
     }
   }
 
-  const handleComplete = () => {
-    // Navigate to dashboard based on role
-    if (role) {
+  const handleComplete = async () => {
+    if (!role) return
+    setLoading(true)
+    const res = await saveProfile(formData, role)
+    setLoading(false)
+    if (res.success) {
       router.push(`/dashboard/${role}`)
+    } else {
+      alert(res.error || "Failed to save profile.")
     }
   }
 
   const progressPercentage = (currentStep / totalSteps) * 100
 
-  if (!role) {
+  if (!role || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-sidebar via-sidebar/95 to-sidebar/90 dark flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          <p className="text-muted-foreground mt-4">Loading...</p>
+          <p className="text-muted-foreground mt-4">Loading your profile details...</p>
         </div>
       </div>
     )
