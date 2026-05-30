@@ -128,13 +128,24 @@ export default function AuthPage() {
   }
 
   const handleOAuth = async (strategy: "oauth_google" | "oauth_github") => {
-    if (!isSignInLoaded) return
     try {
-      await signIn.authenticateWithRedirect({
-        strategy,
-        redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/",
-      })
+      if (isLogin) {
+        if (!isSignInLoaded) return
+        await signIn.authenticateWithRedirect({
+          strategy,
+          redirectUrl: `${window.location.origin}/sso-callback`,
+          redirectUrlComplete: `${window.location.origin}/`,
+          continueSession: true,
+        })
+      } else {
+        if (!isSignUpLoaded) return
+        await signUp.authenticateWithRedirect({
+          strategy,
+          redirectUrl: `${window.location.origin}/sso-callback`,
+          redirectUrlComplete: `${window.location.origin}/`,
+          continueSession: true,
+        })
+      }
     } catch (err: any) {
       console.error(err)
       alert(err.message || "Failed to initiate social login.")
