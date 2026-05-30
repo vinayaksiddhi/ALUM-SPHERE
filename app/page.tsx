@@ -161,6 +161,7 @@ export default function AuthPage() {
           <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
 
           <AnimatePresence mode="wait">
+            {verifying ? (
               <motion.div key="verify" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
                 <div className="text-center space-y-2">
                   <div className="inline-flex p-3 rounded-full bg-primary/10 text-primary mb-2">
