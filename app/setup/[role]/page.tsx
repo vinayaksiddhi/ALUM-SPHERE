@@ -24,6 +24,7 @@ import { useRouter, useParams } from "next/navigation"
 import { useEffect } from "react"
 import { syncUser } from "@/app/actions/sync-user"
 import { saveProfile } from "@/app/actions/save-profile"
+import { ImageUpload } from "@/components/image-upload"
 
 export default function SetupPage() {
   const router = useRouter()
@@ -218,18 +219,11 @@ export default function SetupPage() {
                 </div>
 
                 {/* Profile Photo */}
-                <div className="flex flex-col items-center gap-4">
-                  <Avatar className="w-24 h-24 ring-4 ring-primary/20">
-                    <AvatarImage src={formData.profilePhoto || "/placeholder.svg"} />
-                    <AvatarFallback className="bg-primary/10 text-primary text-2xl">
-                      {formData.fullName.charAt(0) || "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <Button variant="outline" className="gap-2 bg-transparent">
-                    <Upload className="h-4 w-4" />
-                    Upload Photo
-                  </Button>
-                </div>
+                <ImageUpload 
+                  value={formData.profilePhoto} 
+                  onChange={(url) => setFormData({ ...formData, profilePhoto: url })}
+                  fallback={formData.fullName}
+                />
 
                 <div className="space-y-2">
                   <Label htmlFor="fullName">Full Name</Label>
