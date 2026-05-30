@@ -15,14 +15,25 @@ export async function syncUser() {
       return { success: false, error: "No email address found", needsSetup: false }
     }
 
-    // Check if the user profile already exists
-    let profile = await db.profiles.findUnique({
+    // Race DB lookup against a 5-second timeout to prevent hanging
+    const profilePromise = db.profiles.findUnique({
       where: { clerk_id: clerkUser.id },
       include: {
         student_profiles: true,
         alumni_profiles: true,
       },
     })
+
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 5000)
+    )
+
+    let profile = await Promise.race([profilePromise, timeoutPromise])
+
+    // If timed out, needsSetup = true, show role modal
+    if (profile === null) {
+      return { success: false, error: "DB timeout", needsSetup: true }
+    }
 
     // New user — create a bare profile record (role will be set after role selection)
     const needsSetup = !profile || (!profile.student_profiles && !profile.alumni_profiles)
@@ -47,6 +58,6 @@ export async function syncUser() {
     return { success: true, profile, needsSetup }
   } catch (error: any) {
     console.error("Error in syncUser action:", error)
-    return { success: false, error: error.message || "Failed to synchronize profile", needsSetup: false }
+    return { success: false, error: error.message || "Failed to synchronize profile", needsSetup: true }
   }
 }
