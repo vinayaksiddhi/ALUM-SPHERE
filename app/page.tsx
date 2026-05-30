@@ -53,7 +53,7 @@ export default function AuthPage() {
     setError("")
 
     if (isLogin) {
-      if (!isSignInLoaded || !signIn) { setError("Auth not ready yet. Please wait."); return }
+      if (!isSignInLoaded || !signIn) return
       setIsSubmitting(true)
       try {
         const result = await signIn.create({
@@ -80,7 +80,7 @@ export default function AuthPage() {
         setIsSubmitting(false)
       }
     } else {
-      if (!isSignUpLoaded || !signUp) { setError("Auth not ready yet. Please wait."); return }
+      if (!isSignUpLoaded || !signUp) return
       setIsSubmitting(true)
       try {
         await signUp.create({
@@ -259,9 +259,13 @@ export default function AuthPage() {
                     </p>
                   )}
 
-                  <Button type="submit" disabled={isSubmitting} className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold py-5 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-1.5 disabled:opacity-50">
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting || (isLogin ? !isSignInLoaded : !isSignUpLoaded)}
+                    className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold py-5 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-wait disabled:hover:scale-100"
+                  >
                     <Sparkles className="h-4 w-4" />
-                    {isSubmitting ? (isLogin ? "Signing in..." : "Creating account...") : (isLogin ? "Log In" : "Get Started")}
+                    {(!isLogin ? !isSignUpLoaded : !isSignInLoaded) ? "Loading..." : isSubmitting ? (isLogin ? "Signing in..." : "Creating account...") : (isLogin ? "Log In" : "Get Started")}
                   </Button>
 
                   <div className="relative my-4">
