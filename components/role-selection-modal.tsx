@@ -11,10 +11,12 @@ interface RoleSelectionModalProps {
 
 export default function RoleSelectionModal({ onClose }: RoleSelectionModalProps) {
   const [selectedRole, setSelectedRole] = useState<"student" | "alumni" | null>(null)
+  const [isNavigating, setIsNavigating] = useState(false)
   const router = useRouter()
 
   const handleContinue = () => {
     if (selectedRole) {
+      setIsNavigating(true)
       router.push(`/setup/${selectedRole}`)
     }
   }
@@ -148,15 +150,15 @@ export default function RoleSelectionModal({ onClose }: RoleSelectionModalProps)
           </button>
           <button
             onClick={handleContinue}
-            disabled={!selectedRole}
+            disabled={!selectedRole || isNavigating}
             className={`flex-1 px-6 py-3.5 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 text-sm ${
-              selectedRole
+              selectedRole && !isNavigating
                 ? "bg-gradient-to-r from-primary to-accent text-primary-foreground hover:opacity-95 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-primary/10"
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             }`}
           >
-            Deploy Dashboard
-            <ArrowRight className="h-4 w-4" />
+            {isNavigating ? "Deploying..." : "Deploy Dashboard"}
+            {!isNavigating && <ArrowRight className="h-4 w-4" />}
           </button>
         </div>
       </motion.div>

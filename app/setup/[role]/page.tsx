@@ -33,6 +33,7 @@ export default function SetupPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [totalSteps] = useState(4)
   const [loading, setLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -116,13 +117,13 @@ export default function SetupPage() {
 
   const handleComplete = async () => {
     if (!role) return
-    setLoading(true)
+    setIsSubmitting(true)
     const res = await saveProfile(formData, role)
-    setLoading(false)
     if (res.success) {
       router.push(`/dashboard/${role}`)
     } else {
       alert(res.error || "Failed to save profile.")
+      setIsSubmitting(false)
     }
   }
 
@@ -548,9 +549,9 @@ export default function SetupPage() {
               <ArrowRight className="h-5 w-5" />
             </Button>
           ) : (
-            <Button onClick={handleComplete} className="flex-1 gap-2 bg-primary hover:bg-primary/90">
-              Complete Setup
-              <Check className="h-5 w-5" />
+            <Button disabled={isSubmitting} onClick={handleComplete} className="flex-1 gap-2 bg-primary hover:bg-primary/90 disabled:opacity-50">
+              {isSubmitting ? "Saving..." : "Complete Setup"}
+              {!isSubmitting && <Check className="h-5 w-5" />}
             </Button>
           )}
         </div>
