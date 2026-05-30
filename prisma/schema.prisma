@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model alumni_profiles {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profile_id   String    @unique @db.Uuid
+  college      String
+  department   String
+  passing_year Int
+  company      String?
+  job_title    String?
+  biography    String?
+  expertise    String[]  @default([])
+  github_url   String?
+  linkedin_url String?
+  verified     Boolean?  @default(false)
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+  profiles     profiles  @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model comments {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  question_id   String?         @db.Uuid
+  author_id     String?         @db.Uuid
+  content       String
+  created_at    DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?       @default(now()) @db.Timestamptz(6)
+  comment_likes comment_likes[]
+  profiles      profiles?       @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  questions     questions?      @relation(fields: [question_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model connection_requests {
+  id                                                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sender_id                                          String?            @db.Uuid
+  receiver_id                                        String?            @db.Uuid
+  message                                            String?
+  status                                             connection_status? @default(PENDING)
+  created_at                                         DateTime?          @default(now()) @db.Timestamptz(6)
+  profiles_connection_requests_receiver_idToprofiles profiles?          @relation("connection_requests_receiver_idToprofiles", fields: [receiver_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles_connection_requests_sender_idToprofiles   profiles?          @relation("connection_requests_sender_idToprofiles", fields: [sender_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([sender_id, receiver_id])
+}
+
+model conversation_participants {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id String?        @db.Uuid
+  profile_id      String?        @db.Uuid
+  conversations   conversations? @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles        profiles?      @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([conversation_id, profile_id])
+}
+
+model conversations {
+  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at                DateTime?                   @default(now()) @db.Timestamptz(6)
+  conversation_participants conversation_participants[]
+  messages                  messages[]
+}
+
+model events {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  host_id             String?               @db.Uuid
+  title               String
+  description         String
+  event_date          DateTime              @db.Timestamptz(6)
+  meeting_link        String?
+  created_at          DateTime?             @default(now()) @db.Timestamptz(6)
+  event_registrations event_registrations[]
+  profiles            profiles?             @relation(fields: [host_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model messages {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id String?        @db.Uuid
+  sender_id       String?        @db.Uuid
+  content         String
+  created_at      DateTime?      @default(now()) @db.Timestamptz(6)
+  conversations   conversations? @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles        profiles?      @relation(fields: [sender_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model profiles {
+  id                                                            String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clerk_id                                                      String                      @unique
+  email                                                         String                      @unique
+  name                                                          String
+  avatar_url                                                    String?
+  role                                                          user_role
+  created_at                                                    DateTime?                   @default(now()) @db.Timestamptz(6)
+  updated_at                                                    DateTime?                   @default(now()) @db.Timestamptz(6)
+  alumni_profiles                                               alumni_profiles?
+  comment_likes                                                 comment_likes[]
+  comments                                                      comments[]
+  connection_requests_connection_requests_receiver_idToprofiles connection_requests[]       @relation("connection_requests_receiver_idToprofiles")
+  connection_requests_connection_requests_sender_idToprofiles   connection_requests[]       @relation("connection_requests_sender_idToprofiles")
+  conversation_participants                                     conversation_participants[]
+  event_registrations                                           event_registrations[]
+  events                                                        events[]
+  messages                                                      messages[]
+  project_likes                                                 project_likes[]
+  projects                                                      projects[]
+  question_likes                                                question_likes[]
+  questions                                                     questions[]
+  student_profiles                                              student_profiles?
+}
+
+model projects {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id      String?         @db.Uuid
+  title         String
+  description   String
+  tech_stack    String[]        @default([])
+  status        project_status? @default(IN_PROGRESS)
+  created_at    DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?       @default(now()) @db.Timestamptz(6)
+  project_likes project_likes[]
+  profiles      profiles?       @relation(fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model questions {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  author_id      String?          @db.Uuid
+  question_text  String
+  tags           String[]         @default([])
+  created_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  comments       comments[]
+  question_likes question_likes[]
+  profiles       profiles?        @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model student_profiles {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profile_id   String    @unique @db.Uuid
+  college      String
+  department   String
+  passing_year Int
+  biography    String?
+  skills       String[]  @default([])
+  github_url   String?
+  linkedin_url String?
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+  profiles     profiles  @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model comment_likes {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  comment_id String   @db.Uuid
+  profile_id String   @db.Uuid
+  created_at DateTime @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  comments   comments @relation(fields: [comment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles   profiles @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([comment_id, profile_id], map: "unique_comment_profile_like")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model event_registrations {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_id      String   @db.Uuid
+  profile_id    String   @db.Uuid
+  registered_at DateTime @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  events        events   @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles      profiles @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([event_id, profile_id], map: "unique_event_registration")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model project_likes {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id String   @db.Uuid
+  profile_id String   @db.Uuid
+  created_at DateTime @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  profiles   profiles @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  projects   projects @relation(fields: [project_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([project_id, profile_id], map: "unique_project_profile_like")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model question_likes {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  question_id String    @db.Uuid
+  profile_id  String    @db.Uuid
+  created_at  DateTime  @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  profiles    profiles  @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  questions   questions @relation(fields: [question_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([question_id, profile_id], map: "unique_question_profile_like")
+}
+
+enum collaborator_status {
+  PENDING
+  JOINED
+  REJECTED
+}
+
+enum connection_status {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum project_status {
+  IN_PROGRESS
+  LOOKING_FOR_CONTRIBUTORS
+  COMPLETED
+}
+
+enum user_role {
+  STUDENT
+  ALUMNI
+  ADMIN
+}

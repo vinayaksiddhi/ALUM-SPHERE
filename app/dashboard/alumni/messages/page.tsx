@@ -53,7 +53,13 @@ const mockConversations = [
   },
 ]
 
-const mockMessages = [
+const mockMessages: {
+  id: string
+  senderId: string
+  content: string
+  timestamp: Date
+  status: "sent" | "delivered" | "read"
+}[] = [
   {
     id: "1",
     senderId: "student",

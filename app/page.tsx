@@ -1,14 +1,13 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Eye, EyeOff, GraduationCap, Mail, Lock, Github } from "lucide-react"
+import { Eye, EyeOff, GraduationCap, Mail, Lock, Github, Sparkles } from "lucide-react"
 import RoleSelectionModal from "@/components/role-selection-modal"
 import AnimatedBackground from "@/components/animated-background"
 
@@ -29,49 +28,64 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#f0f9ff] via-white to-[#fef7ff]">
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-slate-950 text-slate-100">
+      {/* Dynamic particles and floating blurs background */}
       <AnimatedBackground />
 
+      {/* Cyber Grid Overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800b_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
         className="relative z-10 w-full max-w-md px-4"
       >
-        {/* Logo/Brand */}
+        {/* Brand Logo & Presentation */}
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.2, duration: 0.5 }}
-          className="text-center mb-8"
+          className="text-center mb-6"
         >
           <div className="inline-flex items-center gap-2 mb-3">
-            <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 shadow-lg shadow-primary/10">
-              <GraduationCap className="h-8 w-8 text-primary" />
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-lg shadow-primary/20 scale-105 animate-pulse" style={{ animationDuration: '4s' }}>
+              <GraduationCap className="h-8 w-8" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">AlumSphere</h1>
-          <p className="text-muted-foreground">Bridge the gap between students and alumni</p>
+          <h1 className="text-3xl font-extrabold tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-foreground via-foreground/90 to-primary mb-1.5">
+            AlumSphere
+          </h1>
+          <p className="text-muted-foreground text-sm font-medium">
+            Bridging the gap between students and alumni
+          </p>
         </motion.div>
 
-        {/* Auth Card */}
+        {/* Glassmorphic Auth Card */}
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.5 }}
-          className="glass rounded-2xl p-8 shadow-2xl"
+          className="bg-card/40 backdrop-blur-xl border border-border/40 rounded-3xl p-8 shadow-2xl relative overflow-hidden group"
         >
-          <div className="flex gap-2 mb-6">
+          {/* Subtle top edge lighting gradient */}
+          <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+          
+          <div className="flex gap-2 mb-6 bg-muted/30 p-1 rounded-xl border border-border/30">
             <Button
               variant={isLogin ? "default" : "ghost"}
-              className="flex-1 transition-all duration-300"
+              className={`flex-1 transition-all duration-300 rounded-lg text-xs font-semibold uppercase tracking-wider py-4 ${
+                isLogin ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:text-foreground"
+              }`}
               onClick={() => setIsLogin(true)}
             >
               Login
             </Button>
             <Button
               variant={!isLogin ? "default" : "ghost"}
-              className="flex-1 transition-all duration-300"
+              className={`flex-1 transition-all duration-300 rounded-lg text-xs font-semibold uppercase tracking-wider py-4 ${
+                !isLogin ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:text-foreground"
+              }`}
               onClick={() => setIsLogin(false)}
             >
               Sign Up
@@ -80,16 +94,16 @@ export default function AuthPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-foreground">
-                Email
+              <Label htmlFor="email" className="text-xs uppercase font-bold tracking-wider text-muted-foreground">
+                Email Address
               </Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              <div className="relative group">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors duration-200" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder="your@email.com"
-                  className="pl-10 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary transition-all"
+                  placeholder="name@university.edu"
+                  className="pl-11 bg-slate-900/40 border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-primary/40 focus:border-primary/40 rounded-xl transition-all duration-200"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
@@ -98,16 +112,16 @@ export default function AuthPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-foreground">
+              <Label htmlFor="password" className="text-xs uppercase font-bold tracking-wider text-muted-foreground">
                 Password
               </Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              <div className="relative group">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors duration-200" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
-                  className="pl-10 pr-10 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary transition-all"
+                  className="pl-11 pr-11 bg-slate-900/40 border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:ring-1 focus:ring-primary/40 focus:border-primary/40 rounded-xl transition-all duration-200"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   required
@@ -115,9 +129,9 @@ export default function AuthPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
@@ -129,12 +143,13 @@ export default function AuthPage() {
                     id="remember"
                     checked={formData.rememberMe}
                     onCheckedChange={(checked) => setFormData({ ...formData, rememberMe: checked as boolean })}
+                    className="border-border/60 data-[state=checked]:bg-primary rounded"
                   />
-                  <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">
-                    Remember me
+                  <Label htmlFor="remember" className="text-xs text-muted-foreground cursor-pointer select-none">
+                    Remember my credentials
                   </Label>
                 </div>
-                <Button variant="link" className="text-primary p-0 h-auto text-sm">
+                <Button variant="link" className="text-primary hover:text-primary/80 p-0 h-auto text-xs font-semibold">
                   Forgot password?
                 </Button>
               </div>
@@ -142,17 +157,18 @@ export default function AuthPage() {
 
             <Button
               type="submit"
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-6 rounded-lg transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+              className="w-full bg-gradient-to-r from-primary to-accent hover:from-primary/95 hover:to-accent/95 text-primary-foreground font-semibold py-5 rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-primary/20 flex items-center justify-center gap-1.5"
             >
-              {isLogin ? "Login" : "Create Account"}
+              <Sparkles className="h-4 w-4" />
+              {isLogin ? "Log In" : "Get Started"}
             </Button>
 
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border"></div>
+                <div className="w-full border-t border-border/20"></div>
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+              <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-wider">
+                <span className="bg-transparent px-3 text-muted-foreground">Authorized Channels Only</span>
               </div>
             </div>
 
@@ -160,9 +176,9 @@ export default function AuthPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="bg-muted/50 border-border text-foreground hover:bg-muted transition-all"
+                className="bg-slate-900/30 border-border/50 text-foreground hover:bg-slate-900/60 rounded-xl transition-all text-xs font-medium py-5 gap-2"
               >
-                <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+                <svg className="h-4 w-4 text-slate-300" viewBox="0 0 24 24">
                   <path
                     fill="currentColor"
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -185,9 +201,9 @@ export default function AuthPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="bg-muted/50 border-border text-foreground hover:bg-muted transition-all"
+                className="bg-slate-900/30 border-border/50 text-foreground hover:bg-slate-900/60 rounded-xl transition-all text-xs font-medium py-5 gap-2"
               >
-                <Github className="mr-2 h-4 w-4" />
+                <Github className="h-4 w-4 text-slate-300" />
                 GitHub
               </Button>
             </div>
@@ -198,11 +214,11 @@ export default function AuthPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
-          className="text-center text-sm text-muted-foreground mt-6"
+          className="text-center text-xs text-muted-foreground mt-5"
         >
-          {isLogin ? "Don't have an account? " : "Already have an account? "}
-          <button onClick={() => setIsLogin(!isLogin)} className="text-primary hover:underline font-medium">
-            {isLogin ? "Sign up" : "Login"}
+          {isLogin ? "New to the platform? " : "Already registered? "}
+          <button onClick={() => setIsLogin(!isLogin)} className="text-primary hover:underline font-bold transition-colors">
+            {isLogin ? "Sign up here" : "Sign in here"}
           </button>
         </motion.p>
       </motion.div>
