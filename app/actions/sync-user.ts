@@ -7,12 +7,12 @@ export async function syncUser() {
   try {
     const clerkUser = await currentUser()
     if (!clerkUser) {
-      return { success: false, error: "Not authenticated" }
+      return { success: false, error: "Not authenticated", needsSetup: false }
     }
 
     const email = clerkUser.emailAddresses[0]?.emailAddress
     if (!email) {
-      return { success: false, error: "No email address found" }
+      return { success: false, error: "No email address found", needsSetup: false }
     }
 
     // Check if the user profile already exists
@@ -24,17 +24,18 @@ export async function syncUser() {
       },
     })
 
-    // If profile does not exist, provision it in the database
+    // New user — create a bare profile record (role will be set after role selection)
+    const needsSetup = !profile || (!profile.student_profiles && !profile.alumni_profiles)
+
     if (!profile) {
       const name = `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`.trim() || "New User"
-      
       profile = await db.profiles.create({
         data: {
           clerk_id: clerkUser.id,
           email: email,
           name: name,
           avatar_url: clerkUser.imageUrl || null,
-          role: "STUDENT", // Default fallback role
+          role: "STUDENT", // temporary placeholder, updated on setup
         },
         include: {
           student_profiles: true,
@@ -43,9 +44,9 @@ export async function syncUser() {
       })
     }
 
-    return { success: true, profile }
+    return { success: true, profile, needsSetup }
   } catch (error: any) {
     console.error("Error in syncUser action:", error)
-    return { success: false, error: error.message || "Failed to synchronize profile" }
+    return { success: false, error: error.message || "Failed to synchronize profile", needsSetup: false }
   }
 }

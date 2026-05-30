@@ -33,25 +33,36 @@ export default function AuthPage() {
     rememberMe: false,
   })
 
-  // JIT Session Synchronization & Redirection Check
+  // Prevent triggering sync when on same page after OTP verification
+  const [justVerified, setJustVerified] = useState(false)
+
+  // JIT Session Synchronization & Redirection Check (only for returning users)
   useEffect(() => {
-    if (isUserLoaded && isSignedIn) {
-      setLoading(true)
-      syncUser().then((res) => {
-        setLoading(false)
-        if (res.success && res.profile) {
-          const profile = res.profile
-          if (profile.role) {
-            router.push(`/dashboard/${profile.role.toLowerCase()}`)
-          } else {
-            setShowRoleModal(true)
-          }
-        } else {
-          setShowRoleModal(true)
-        }
-      })
-    }
-  }, [isUserLoaded, isSignedIn, router])
+    if (!isUserLoaded || !isSignedIn || justVerified) return
+    setLoading(true)
+    const timeout = setTimeout(() => {
+      // Safety net: if syncUser hangs for 8s, unlock the page
+      setLoading(false)
+      setShowRoleModal(true)
+    }, 8000)
+
+    syncUser().then((res) => {
+      clearTimeout(timeout)
+      setLoading(false)
+      if (res.success && res.profile && !res.needsSetup) {
+        // Existing user with complete profile — go straight to their dashboard
+        const role = res.profile.role
+        router.push(`/dashboard/${role.toLowerCase()}`)
+      } else {
+        // New or incomplete profile — show role selection modal
+        setShowRoleModal(true)
+      }
+    }).catch(() => {
+      clearTimeout(timeout)
+      setLoading(false)
+      setShowRoleModal(true)
+    })
+  }, [isUserLoaded, isSignedIn]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -109,21 +120,24 @@ export default function AuthPage() {
     setLoading(true)
 
     try {
-      const completeSignUp = await signUp.attemptEmailAddressVerification({
-        code,
-      })
+      const completeSignUp = await signUp.attemptEmailAddressVerification({ code })
 
       if (completeSignUp.status === "complete") {
         await setSignUpActive({ session: completeSignUp.createdSessionId })
+        // Mark as just verified so the useEffect doesn't fire and double-redirect
+        setJustVerified(true)
+        setLoading(false)
+        setVerifying(false)
+        // Show role selection modal — this is a brand new user
         setShowRoleModal(true)
       } else {
-        alert("Verification failed. Please double check the code.")
+        setLoading(false)
+        alert("Verification incomplete. Please try again.")
       }
     } catch (err: any) {
       console.error(err)
-      alert(err.errors?.[0]?.message || "Failed to verify the registration code.")
-    } finally {
       setLoading(false)
+      alert(err.errors?.[0]?.message || "Failed to verify the registration code.")
     }
   }
 
