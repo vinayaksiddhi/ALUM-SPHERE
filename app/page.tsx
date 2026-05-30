@@ -161,43 +161,26 @@ export default function AuthPage() {
           <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
 
           <AnimatePresence mode="wait">
-            {verifying ? (
-              <motion.form key="verify" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} onSubmit={handleVerify} className="space-y-5">
+              <motion.div key="verify" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
                 <div className="text-center space-y-2">
                   <div className="inline-flex p-3 rounded-full bg-primary/10 text-primary mb-2">
-                    <KeyRound className="h-6 w-6" />
+                    <Mail className="h-6 w-6" />
                   </div>
                   <h2 className="text-xl font-bold text-foreground">Check Your Email</h2>
                   <p className="text-xs text-muted-foreground">
-                    We sent a 6-digit code to <span className="text-primary font-semibold">{formData.email}</span>
+                    We sent a confirmation link to <span className="text-primary font-semibold">{formData.email}</span>
                   </p>
                   <p className="text-xs text-amber-400/80 bg-amber-400/10 rounded-lg p-2">📬 Check your spam/junk folder too!</p>
                 </div>
+                
+                <p className="text-sm text-center text-muted-foreground py-4">
+                  Please click the link in that email to confirm your account and sign in.
+                </p>
 
-                {error && <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2 text-center">{error}</p>}
-
-                <div className="space-y-2">
-                  <Label htmlFor="code" className="text-xs uppercase font-bold tracking-wider text-muted-foreground">Verification Code</Label>
-                  <Input
-                    id="code"
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="000000"
-                    className="bg-slate-900/40 border-border/50 text-foreground text-center text-2xl font-extrabold tracking-[0.5em] focus:ring-1 focus:ring-primary/40 rounded-xl py-6"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    maxLength={6}
-                    required
-                  />
-                </div>
-
-                <Button type="submit" disabled={isSubmitting || code.length < 6} className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold py-5 rounded-xl hover:scale-[1.02] transition-all shadow-lg shadow-primary/20 disabled:opacity-50">
-                  {isSubmitting ? "Verifying..." : "Confirm & Continue"}
-                </Button>
-                <button type="button" onClick={() => { setVerifying(false); setCode(""); setError("") }} className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors">
+                <button type="button" onClick={() => { setVerifying(false); setCode(""); setError("") }} className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors mt-4">
                   ← Back to sign up
                 </button>
-              </motion.form>
+              </motion.div>
             ) : (
               <motion.div key="auth" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 {/* Tabs */}
@@ -231,7 +214,7 @@ export default function AuthPage() {
                     </div>
                   </div>
 
-                  {!isLogin && <p className="text-xs text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">A 6-digit verification code will be emailed to you</p>}
+                  {!isLogin && <p className="text-xs text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">A confirmation link will be emailed to you</p>}
 
                   <Button type="submit" disabled={isSubmitting} className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold py-5 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-1.5 disabled:opacity-50">
                     <Sparkles className="h-4 w-4" />
