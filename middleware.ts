@@ -1,16 +1,45 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+import { createServerClient } from "@supabase/ssr"
+import { NextResponse, type NextRequest } from "next/server"
 
-const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/setup(.*)"])
+export async function middleware(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request })
 
-export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) await auth.protect()
-})
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  // Refresh the session — important for Server Components to have fresh tokens
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const protectedPaths = ["/dashboard", "/setup"]
+  const isProtected = protectedPaths.some((p) => request.nextUrl.pathname.startsWith(p))
+
+  if (isProtected && !user) {
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = "/"
+    return NextResponse.redirect(redirectUrl)
+  }
+
+  return supabaseResponse
+}
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files
     "/((?!_next|[^?]*\\.(?:html|css|js|gif|svg|png|webp|jpg|jpeg|font|woff2?)|logo\\.png|favicon\\.ico|sitemap\\.xml|robots\\.txt).*)",
-    // Always run for API routes
-    "/(api|trpc)(.*)",
   ],
 }

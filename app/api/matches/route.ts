@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
+import { createSupabaseServerClient } from "@/lib/supabase-server"
 import { db } from "@/lib/db"
 import { getTopMatches, UserProfile } from "@/lib/matching-algorithm"
 
 export async function GET(request: Request) {
   try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) {
+    const supabase = await createSupabaseServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    const clerkId = user.id
 
     // 1. Fetch current student profile
     const student = await db.profiles.findUnique({
@@ -78,10 +80,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) {
+    const supabase = await createSupabaseServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    const clerkId = user.id
 
     const body = await request.json()
     const { alumniId, message } = body

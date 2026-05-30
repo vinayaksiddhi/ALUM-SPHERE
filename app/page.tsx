@@ -9,15 +9,12 @@ import { Label } from "@/components/ui/label"
 import { GraduationCap, Mail, Lock, Github, Sparkles, Eye, EyeOff, KeyRound } from "lucide-react"
 import RoleSelectionModal from "@/components/role-selection-modal"
 import AnimatedBackground from "@/components/animated-background"
-import { useSignIn, useSignUp, useUser } from "@clerk/nextjs"
+import { createClient } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
-import { syncUser } from "@/app/actions/sync-user"
 
 export default function AuthPage() {
   const router = useRouter()
-  const { isLoaded: isUserLoaded, isSignedIn } = useUser()
-  const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn() as any
-  const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp() as any
+  const supabase = createClient()
 
   const [isLogin, setIsLogin] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
@@ -26,124 +23,115 @@ export default function AuthPage() {
   const [code, setCode] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
-  const [justVerified, setJustVerified] = useState(false)
 
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  })
+  const [formData, setFormData] = useState({ email: "", password: "" })
 
-  // Redirect already-logged-in returning users
+  // Check if user is already signed in
   useEffect(() => {
-    if (!isUserLoaded || !isSignedIn || justVerified) return
-
-    syncUser().then((res) => {
-      if (res.success && res.profile && !res.needsSetup) {
-        router.push(`/dashboard/${res.profile.role.toLowerCase()}`)
-      } else {
-        setShowRoleModal(true)
-      }
-    }).catch(() => {
-      setShowRoleModal(true)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return
+      // Already signed in — check if they have a profile
+      supabase
+        .from("profiles")
+        .select("role, student_profiles(id), alumni_profiles(id)")
+        .eq("clerk_id", session.user.id)
+        .single()
+        .then(({ data }) => {
+          if (data && (data.student_profiles || data.alumni_profiles)) {
+            router.push(`/dashboard/${data.role.toLowerCase()}`)
+          } else {
+            setShowRoleModal(true)
+          }
+        })
     })
-  }, [isUserLoaded, isSignedIn]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setIsSubmitting(true)
 
     if (isLogin) {
-      if (!isSignInLoaded || !signIn) return
-      setIsSubmitting(true)
-      try {
-        const result = await signIn.create({
-          identifier: formData.email,
-          password: formData.password,
-        })
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      })
 
-        if (result.status === "complete") {
-          await setSignInActive({ session: result.createdSessionId })
-          const res = await syncUser()
-          if (res.success && res.profile && !res.needsSetup) {
-            router.push(`/dashboard/${res.profile.role.toLowerCase()}`)
-          } else {
-            setJustVerified(true)
-            setShowRoleModal(true)
-          }
+      if (signInError) {
+        setError(signInError.message)
+        setIsSubmitting(false)
+        return
+      }
+
+      // Successful login — check profile
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role, student_profiles(id), alumni_profiles(id)")
+          .eq("clerk_id", session.user.id)
+          .single()
+
+        if (profile && (profile.student_profiles || profile.alumni_profiles)) {
+          router.push(`/dashboard/${profile.role.toLowerCase()}`)
         } else {
-          setError("Sign-in needs additional verification. Please try again.")
+          setShowRoleModal(true)
         }
-      } catch (err: any) {
-        const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || "Incorrect email or password."
-        setError(msg)
-      } finally {
-        setIsSubmitting(false)
       }
+      setIsSubmitting(false)
     } else {
-      if (!isSignUpLoaded || !signUp) return
-      setIsSubmitting(true)
-      try {
-        await signUp.create({
-          emailAddress: formData.email,
-          password: formData.password,
-        })
-        await signUp.prepareEmailAddressVerification({ strategy: "email_code" })
-        setVerifying(true)
-      } catch (err: any) {
-        const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || "Sign up failed. Try a different email or stronger password."
-        setError(msg)
-      } finally {
+      // Sign Up — send OTP email
+      const { error: signUpError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+
+      if (signUpError) {
+        setError(signUpError.message)
         setIsSubmitting(false)
+        return
       }
+
+      setVerifying(true)
+      setIsSubmitting(false)
     }
   }
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-    if (!isSignUpLoaded || !signUp) return
     setIsSubmitting(true)
 
-    try {
-      const result = await signUp.attemptEmailAddressVerification({ code })
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: formData.email,
+      token: code,
+      type: "signup",
+    })
 
-      if (result.status === "complete") {
-        await setSignUpActive({ session: result.createdSessionId })
-        setJustVerified(true)
-        setVerifying(false)
-        setShowRoleModal(true)
-      } else {
-        setError("Verification incomplete. Please try again.")
-      }
-    } catch (err: any) {
-      const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || "Wrong code. Please double-check the email."
-      setError(msg)
-    } finally {
+    if (verifyError) {
+      setError(verifyError.message)
       setIsSubmitting(false)
+      return
     }
+
+    // Verified — show role selection
+    setVerifying(false)
+    setIsSubmitting(false)
+    setShowRoleModal(true)
   }
 
-  const handleOAuth = async (strategy: "oauth_google" | "oauth_github") => {
+  const handleOAuth = async (provider: "google" | "github") => {
     setError("")
-    try {
-      if (isLogin) {
-        if (!isSignInLoaded || !signIn) return
-        await signIn.authenticateWithRedirect({
-          strategy,
-          redirectUrl: `${window.location.origin}/sso-callback`,
-          redirectUrlComplete: `${window.location.origin}/`,
-        })
-      } else {
-        if (!isSignUpLoaded || !signUp) return
-        await signUp.authenticateWithRedirect({
-          strategy,
-          redirectUrl: `${window.location.origin}/sso-callback`,
-          redirectUrlComplete: `${window.location.origin}/`,
-        })
-      }
-    } catch (err: any) {
-      setError(err?.message || "Failed to initiate social login.")
-    }
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    if (oauthError) setError(oauthError.message)
   }
 
   return (
@@ -174,7 +162,6 @@ export default function AuthPage() {
 
           <AnimatePresence mode="wait">
             {verifying ? (
-              /* OTP Verification */
               <motion.form key="verify" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} onSubmit={handleVerify} className="space-y-5">
                 <div className="text-center space-y-2">
                   <div className="inline-flex p-3 rounded-full bg-primary/10 text-primary mb-2">
@@ -184,9 +171,7 @@ export default function AuthPage() {
                   <p className="text-xs text-muted-foreground">
                     We sent a 6-digit code to <span className="text-primary font-semibold">{formData.email}</span>
                   </p>
-                  <p className="text-xs text-amber-400/80 bg-amber-400/10 rounded-lg p-2">
-                    📬 Check your spam/junk folder too!
-                  </p>
+                  <p className="text-xs text-amber-400/80 bg-amber-400/10 rounded-lg p-2">📬 Check your spam/junk folder too!</p>
                 </div>
 
                 {error && <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2 text-center">{error}</p>}
@@ -209,23 +194,16 @@ export default function AuthPage() {
                 <Button type="submit" disabled={isSubmitting || code.length < 6} className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold py-5 rounded-xl hover:scale-[1.02] transition-all shadow-lg shadow-primary/20 disabled:opacity-50">
                   {isSubmitting ? "Verifying..." : "Confirm & Continue"}
                 </Button>
-
                 <button type="button" onClick={() => { setVerifying(false); setCode(""); setError("") }} className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors">
                   ← Back to sign up
                 </button>
               </motion.form>
             ) : (
-              /* Login / Sign Up */
               <motion.div key="auth" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                {/* Tab Toggle */}
+                {/* Tabs */}
                 <div className="flex gap-2 mb-6 bg-muted/30 p-1 rounded-xl border border-border/30">
                   {["Login", "Sign Up"].map((tab, i) => (
-                    <Button
-                      key={tab}
-                      variant={(!i) === isLogin ? "default" : "ghost"}
-                      onClick={() => { setIsLogin(!i); setError("") }}
-                      className={`flex-1 rounded-lg text-xs font-semibold uppercase tracking-wider py-4 transition-all duration-300 ${(!i) === isLogin ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:text-foreground"}`}
-                    >
+                    <Button key={tab} variant={(!i) === isLogin ? "default" : "ghost"} onClick={() => { setIsLogin(!i); setError("") }} className={`flex-1 rounded-lg text-xs font-semibold uppercase tracking-wider py-4 transition-all duration-300 ${(!i) === isLogin ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:text-foreground"}`}>
                       {tab}
                     </Button>
                   ))}
@@ -253,19 +231,11 @@ export default function AuthPage() {
                     </div>
                   </div>
 
-                  {!isLogin && (
-                    <p className="text-xs text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">
-                      A 6-digit verification code will be emailed to you
-                    </p>
-                  )}
+                  {!isLogin && <p className="text-xs text-muted-foreground bg-muted/20 rounded-lg p-2 text-center">A 6-digit verification code will be emailed to you</p>}
 
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting || (isLogin ? !isSignInLoaded : !isSignUpLoaded)}
-                    className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold py-5 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-wait disabled:hover:scale-100"
-                  >
+                  <Button type="submit" disabled={isSubmitting} className="w-full bg-gradient-to-r from-primary to-accent text-primary-foreground font-semibold py-5 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-1.5 disabled:opacity-50">
                     <Sparkles className="h-4 w-4" />
-                    {(!isLogin ? !isSignUpLoaded : !isSignInLoaded) ? "Loading..." : isSubmitting ? (isLogin ? "Signing in..." : "Creating account...") : (isLogin ? "Log In" : "Get Started")}
+                    {isSubmitting ? (isLogin ? "Signing in..." : "Creating account...") : (isLogin ? "Log In" : "Get Started")}
                   </Button>
 
                   <div className="relative my-4">
@@ -276,7 +246,7 @@ export default function AuthPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <Button type="button" variant="outline" onClick={() => handleOAuth("oauth_google")} className="bg-slate-900/30 border-border/50 hover:bg-slate-900/60 rounded-xl text-xs font-medium py-5 gap-2">
+                    <Button type="button" variant="outline" onClick={() => handleOAuth("google")} className="bg-slate-900/30 border-border/50 hover:bg-slate-900/60 rounded-xl text-xs font-medium py-5 gap-2">
                       <svg className="h-4 w-4" viewBox="0 0 24 24">
                         <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                         <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -285,7 +255,7 @@ export default function AuthPage() {
                       </svg>
                       Google
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => handleOAuth("oauth_github")} className="bg-slate-900/30 border-border/50 hover:bg-slate-900/60 rounded-xl text-xs font-medium py-5 gap-2">
+                    <Button type="button" variant="outline" onClick={() => handleOAuth("github")} className="bg-slate-900/30 border-border/50 hover:bg-slate-900/60 rounded-xl text-xs font-medium py-5 gap-2">
                       <Github className="h-4 w-4" />
                       GitHub
                     </Button>

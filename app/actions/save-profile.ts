@@ -1,6 +1,6 @@
 "use server"
 
-import { currentUser } from "@clerk/nextjs/server"
+import { createSupabaseServerClient } from "@/lib/supabase-server"
 import { db } from "@/lib/db"
 import { user_role } from "@prisma/client"
 
@@ -11,10 +11,8 @@ export async function saveProfile(
     college: string
     department: string
     bio: string
-    // Student
     graduationYear?: string
     skills?: string[]
-    // Alumni
     passingYear?: string
     company?: string
     jobRole?: string
@@ -23,12 +21,14 @@ export async function saveProfile(
   role: "student" | "alumni"
 ) {
   try {
-    const clerkUser = await currentUser()
-    if (!clerkUser) {
+    const supabase = await createSupabaseServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
       return { success: false, error: "Not authenticated" }
     }
 
-    const email = formData.email || clerkUser.emailAddresses[0]?.emailAddress
+    const email = formData.email || user.email || ""
     if (!email) {
       return { success: false, error: "Email address is required" }
     }
@@ -37,17 +37,17 @@ export async function saveProfile(
 
     // 1. Upsert base profiles record
     const profile = await db.profiles.upsert({
-      where: { clerk_id: clerkUser.id },
+      where: { clerk_id: user.id },
       update: {
         name: formData.fullName,
         email: email,
         role: targetRole,
       },
       create: {
-        clerk_id: clerkUser.id,
+        clerk_id: user.id,
         name: formData.fullName,
         email: email,
-        avatar_url: clerkUser.imageUrl || null,
+        avatar_url: user.user_metadata?.avatar_url || null,
         role: targetRole,
       },
     })

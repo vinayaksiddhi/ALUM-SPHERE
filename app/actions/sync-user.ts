@@ -1,52 +1,44 @@
 "use server"
 
-import { currentUser } from "@clerk/nextjs/server"
+import { createSupabaseServerClient } from "@/lib/supabase-server"
 import { db } from "@/lib/db"
 
 export async function syncUser() {
   try {
-    const clerkUser = await currentUser()
-    if (!clerkUser) {
+    const supabase = await createSupabaseServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
       return { success: false, error: "Not authenticated", needsSetup: false }
     }
 
-    const email = clerkUser.emailAddresses[0]?.emailAddress
+    const email = user.email
     if (!email) {
       return { success: false, error: "No email address found", needsSetup: false }
     }
 
-    // Race DB lookup against a 5-second timeout to prevent hanging
-    const profilePromise = db.profiles.findUnique({
-      where: { clerk_id: clerkUser.id },
+    // Look up by Supabase auth user ID (stored in clerk_id column)
+    let profile = await db.profiles.findUnique({
+      where: { clerk_id: user.id },
       include: {
         student_profiles: true,
         alumni_profiles: true,
       },
     })
 
-    const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 5000)
-    )
-
-    let profile = await Promise.race([profilePromise, timeoutPromise])
-
-    // If timed out, needsSetup = true, show role modal
-    if (profile === null) {
-      return { success: false, error: "DB timeout", needsSetup: true }
-    }
-
-    // New user — create a bare profile record (role will be set after role selection)
     const needsSetup = !profile || (!profile.student_profiles && !profile.alumni_profiles)
 
     if (!profile) {
-      const name = `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`.trim() || "New User"
+      const name = user.user_metadata?.full_name || user.user_metadata?.name || email.split("@")[0] || "New User"
+      const avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture || null
+
       profile = await db.profiles.create({
         data: {
-          clerk_id: clerkUser.id,
-          email: email,
-          name: name,
-          avatar_url: clerkUser.imageUrl || null,
-          role: "STUDENT", // temporary placeholder, updated on setup
+          clerk_id: user.id, // reusing clerk_id column for Supabase auth UID
+          email,
+          name,
+          avatar_url: avatar,
+          role: "STUDENT",
         },
         include: {
           student_profiles: true,
