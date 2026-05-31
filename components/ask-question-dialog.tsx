@@ -7,17 +7,21 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { X, Plus, Send } from "lucide-react"
+import { X, Plus, Send, Loader2 } from "lucide-react"
+import { askQuestion } from "@/app/actions/get-dashboard-data"
+import { toast } from "sonner"
 
 interface AskQuestionDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
 }
 
-export default function AskQuestionDialog({ open, onOpenChange }: AskQuestionDialogProps) {
+export default function AskQuestionDialog({ open, onOpenChange, onSuccess }: AskQuestionDialogProps) {
   const [question, setQuestion] = useState("")
   const [tags, setTags] = useState<string[]>([])
   const [newTag, setNewTag] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleAddTag = () => {
     if (newTag.trim() && !tags.includes(newTag.trim()) && tags.length < 5) {
@@ -30,12 +34,26 @@ export default function AskQuestionDialog({ open, onOpenChange }: AskQuestionDia
     setTags(tags.filter((tag) => tag !== tagToRemove))
   }
 
-  const handleSubmit = () => {
-    // Handle question submission
-    console.log({ question, tags })
-    onOpenChange(false)
-    setQuestion("")
-    setTags([])
+  const handleSubmit = async () => {
+    setIsSubmitting(true)
+    try {
+      const res = await askQuestion(question, tags)
+      if (res.success) {
+        toast.success("Question published successfully!")
+        onOpenChange(false)
+        setQuestion("")
+        setTags([])
+        if (onSuccess) {
+          onSuccess()
+        }
+      } else {
+        toast.error(res.error || "Failed to publish question")
+      }
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -55,6 +73,8 @@ export default function AskQuestionDialog({ open, onOpenChange }: AskQuestionDia
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               className="min-h-32 resize-none bg-sidebar-accent border-sidebar-border"
+              maxLength={500}
+              disabled={isSubmitting}
             />
             <p className="text-xs text-muted-foreground text-right">{question.length} / 500</p>
           </div>
@@ -74,9 +94,9 @@ export default function AskQuestionDialog({ open, onOpenChange }: AskQuestionDia
                   }
                 }}
                 className="bg-sidebar-accent border-sidebar-border"
-                disabled={tags.length >= 5}
+                disabled={tags.length >= 5 || isSubmitting}
               />
-              <Button onClick={handleAddTag} disabled={tags.length >= 5} className="gap-2">
+              <Button onClick={handleAddTag} disabled={tags.length >= 5 || isSubmitting} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Add
               </Button>
@@ -87,7 +107,7 @@ export default function AskQuestionDialog({ open, onOpenChange }: AskQuestionDia
                 {tags.map((tag) => (
                   <Badge key={tag} variant="secondary" className="px-3 py-1.5 bg-primary/10 text-primary">
                     {tag}
-                    <button onClick={() => handleRemoveTag(tag)} className="ml-2 hover:text-primary-foreground">
+                    <button onClick={() => handleRemoveTag(tag)} disabled={isSubmitting} className="ml-2 hover:text-primary-foreground">
                       <X className="h-3 w-3" />
                     </button>
                   </Badge>
@@ -98,12 +118,16 @@ export default function AskQuestionDialog({ open, onOpenChange }: AskQuestionDia
         </div>
 
         <div className="flex gap-3 mt-6">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting} className="flex-1">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!question.trim() || tags.length === 0} className="flex-1 gap-2">
-            <Send className="h-4 w-4" />
-            Post Question
+          <Button onClick={handleSubmit} disabled={!question.trim() || tags.length === 0 || isSubmitting} className="flex-1 gap-2">
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {isSubmitting ? "Publishing..." : "Post Question"}
           </Button>
         </div>
       </DialogContent>

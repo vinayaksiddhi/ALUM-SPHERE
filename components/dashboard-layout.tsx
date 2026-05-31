@@ -36,6 +36,10 @@ import { useRouter, usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 import NotificationsPanel from "./notifications-panel"
 import GlobalSearchModal from "./global-search-modal"
+import { createClient } from "@/lib/supabase"
+import { toast } from "sonner"
+
+import { getProfile } from "@/app/actions/get-profile"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -43,24 +47,84 @@ interface DashboardLayoutProps {
 }
 
 export default function DashboardLayout({ children, role }: DashboardLayoutProps) {
+  const supabase = createClient()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [profile, setProfile] = useState<any>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
 
-  // Prevent hydration mismatch
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push("/")
+  }
+
+  // Load profile once on mount
   useEffect(() => {
     setMounted(true)
+    let cancelled = false
+    async function fetchProfile() {
+      try {
+        const res = await getProfile()
+        if (!cancelled && res.success && res.profile) {
+          setProfile(res.profile)
+        }
+      } catch (err) {
+        console.error("DashboardLayout profile load error:", err)
+      }
+    }
+    fetchProfile()
+    return () => { cancelled = true }
   }, [])
+
+  // Reset unread count when navigating to messages page
+  useEffect(() => {
+    if (pathname?.includes("/messages")) {
+      setUnreadCount(0)
+    }
+  }, [pathname])
+
+  // Single stable WebSocket for message notifications — runs once
+  useEffect(() => {
+    const channel = supabase
+      .channel("dashboard-messages-badge")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const newMsg = payload.new as any
+          // Only increment badge if user is NOT already on the messages page
+          if (!window.location.pathname.includes("/messages")) {
+            setUnreadCount((prev) => prev + 1)
+          }
+          // Show toast only for messages from other people
+          if (newMsg?.content) {
+            toast("New message received", {
+              description: newMsg.content.substring(0, 40) + (newMsg.content.length > 40 ? "..." : ""),
+              action: {
+                label: "Open Chats",
+                onClick: () => router.push(`/dashboard/${role}/messages`),
+              },
+            })
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const navigation = [
     { name: "Dashboard", icon: Home, href: `/dashboard/${role}` },
     ...(role === "student" ? [{ name: "Search Alumni", icon: Search, href: `/dashboard/${role}/search` }] : []),
     { name: "Connections", icon: Users, href: `/dashboard/${role}/connections` },
-    { name: "Messages", icon: MessageSquare, href: `/dashboard/${role}/messages`, badge: 3 },
+    { name: "Messages", icon: MessageSquare, href: `/dashboard/${role}/messages`, badge: unreadCount > 0 ? unreadCount : undefined },
     { name: "Projects", icon: Briefcase, href: `/dashboard/${role}/projects` },
     { name: "Settings", icon: Settings, href: `/dashboard/${role}/settings` },
   ]
@@ -161,13 +225,13 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2 text-foreground hover:bg-accent/10 rounded-xl px-2">
                   <Avatar className="h-8 w-8 ring-2 ring-primary/20">
-                    <AvatarImage src={role === "alumni" ? "/professional-woman.png" : "/placeholder.svg"} />
+                    <AvatarImage src={profile?.avatar_url || (role === "alumni" ? "/professional-woman.png" : "/placeholder.svg")} />
                     <AvatarFallback className="bg-primary/10 text-primary font-bold">
-                      {role === "alumni" ? "SJ" : "JD"}
+                      {profile?.name ? profile.name.split(" ").map((n: string) => n[0]).join("").toUpperCase() : (role === "alumni" ? "SJ" : "JD")}
                     </AvatarFallback>
                   </Avatar>
                   <span className="hidden sm:inline-block font-medium">
-                    {role === "alumni" ? "Sarah Johnson" : "John Doe"}
+                    {profile?.name || (role === "alumni" ? "Sarah Johnson" : "John Doe")}
                   </span>
                 </Button>
               </DropdownMenuTrigger>
@@ -183,7 +247,7 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
                   Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-border/40" />
-                <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive rounded-xl transition-colors cursor-pointer" onClick={() => router.push("/")}>
+                <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive rounded-xl transition-colors cursor-pointer" onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   Logout
                 </DropdownMenuItem>

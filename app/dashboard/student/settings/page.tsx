@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
@@ -8,46 +8,129 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { User, Bell, Lock, Shield, Eye, EyeOff, Save, Camera } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { User, Bell, Lock, Shield, Save, Loader2 } from "lucide-react"
+import { getProfile, updateAvatarUrl } from "@/app/actions/get-profile"
+import { saveProfile } from "@/app/actions/save-profile"
+import { ImageUpload } from "@/components/image-upload"
+import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 export default function StudentSettingsPage() {
-  const { toast } = useToast()
-  const [showPassword, setShowPassword] = useState(false)
-  const [settings, setSettings] = useState({
-    // Profile
-    name: "John Doe",
-    email: "john.doe@university.edu",
-    bio: "Computer Science student passionate about AI and Machine Learning",
-    college: "MIT",
-    department: "Computer Science",
-    graduationYear: "2025",
-    skills: ["Python", "JavaScript", "React", "Machine Learning"],
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [profile, setProfile] = useState<any>(null)
+  const [newSkill, setNewSkill] = useState("")
 
-    // Notifications
+  const [settings, setSettings] = useState({
+    name: "",
+    email: "",
+    bio: "",
+    college: "",
+    department: "",
+    graduationYear: "",
+    skills: [] as string[],
     emailNotifications: true,
     pushNotifications: true,
     connectionRequests: true,
     messages: true,
     projectUpdates: true,
     weeklyDigest: false,
-
-    // Privacy
     profileVisibility: "public",
     showEmail: false,
     showPhone: false,
     allowMessagesFromAnyone: true,
   })
 
-  const handleSave = () => {
-    toast({
-      title: "Settings saved",
-      description: "Your settings have been updated successfully.",
-    })
+  useEffect(() => {
+    async function loadSettings() {
+      setIsLoading(true)
+      const res = await getProfile()
+      if (res.success && res.profile) {
+        setProfile(res.profile)
+        const sProfile = (res.profile.student_profiles || {}) as any
+        setSettings((prev) => ({
+          ...prev,
+          name: res.profile.name || "",
+          email: res.profile.email || "",
+          bio: sProfile.biography || "",
+          college: sProfile.college || "",
+          department: sProfile.department || "",
+          graduationYear: sProfile.passing_year ? sProfile.passing_year.toString() : "",
+          skills: sProfile.skills || [],
+        }))
+      } else {
+        toast.error("Failed to load settings profile")
+      }
+      setIsLoading(false)
+    }
+    loadSettings()
+  }, [])
+
+  const handleAvatarChange = async (url: string) => {
+    const res = await updateAvatarUrl(url)
+    if (res.success) {
+      setProfile((prev: any) => ({
+        ...prev,
+        avatar_url: url
+      }))
+      toast.success("Profile photo updated!")
+    } else {
+      toast.error(res.error || "Failed to update profile photo")
+    }
+  }
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    const res = await saveProfile({
+      fullName: settings.name,
+      email: settings.email,
+      college: settings.college,
+      department: settings.department,
+      bio: settings.bio,
+      graduationYear: settings.graduationYear,
+      skills: settings.skills,
+    }, "student")
+
+    if (res.success) {
+      toast.success("Profile settings saved successfully!")
+    } else {
+      toast.error(res.error || "Failed to save settings")
+    }
+    setIsSaving(false)
+  }
+
+  const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && newSkill.trim()) {
+      e.preventDefault()
+      if (!settings.skills.includes(newSkill.trim())) {
+        setSettings((prev) => ({
+          ...prev,
+          skills: [...prev.skills, newSkill.trim()]
+        }))
+      }
+      setNewSkill("")
+    }
+  }
+
+  const handleRemoveSkill = (skillToRemove: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      skills: prev.skills.filter((s) => s !== skillToRemove)
+    }))
+  }
+
+  if (isLoading) {
+    return (
+      <DashboardLayout role="student">
+        <div className="flex h-[50vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -91,21 +174,16 @@ export default function StudentSettingsPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Avatar Upload */}
-                <div className="flex items-center gap-6">
-                  <Avatar className="h-24 w-24">
-                    <AvatarImage src="/abstract-geometric-shapes.png" />
-                    <AvatarFallback>JD</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-                      <Camera className="h-4 w-4" />
-                      Change Photo
-                    </Button>
-                    <p className="text-sm text-muted-foreground mt-2">JPG, PNG or GIF. Max 2MB.</p>
-                  </div>
+                <div className="flex flex-col items-start gap-4">
+                  <Label>Profile Picture</Label>
+                  <ImageUpload
+                    value={profile?.avatar_url}
+                    onChange={handleAvatarChange}
+                    fallback={settings.name || "S"}
+                  />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2 mt-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
                     <Input
@@ -167,15 +245,25 @@ export default function StudentSettingsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Skills</Label>
+                  <Label>Skills (Press Enter to Add)</Label>
                   <div className="flex flex-wrap gap-2 mb-2">
                     {settings.skills.map((skill, index) => (
-                      <Badge key={index} variant="secondary">
-                        {skill}
+                      <Badge
+                        key={index}
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-all gap-1 py-1"
+                        onClick={() => handleRemoveSkill(skill)}
+                      >
+                        {skill} <span className="text-[10px] opacity-70">×</span>
                       </Badge>
                     ))}
                   </div>
-                  <Input placeholder="Add a skill (press Enter)" />
+                  <Input
+                    placeholder="Add a skill and press Enter"
+                    value={newSkill}
+                    onChange={(e) => setNewSkill(e.target.value)}
+                    onKeyDown={handleAddSkill}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -212,60 +300,6 @@ export default function StudentSettingsPage() {
                     onCheckedChange={(checked) => setSettings({ ...settings, pushNotifications: checked })}
                   />
                 </div>
-
-                <div className="h-px bg-border" />
-
-                <div className="space-y-4">
-                  <h4 className="font-medium">Activity Notifications</h4>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="conn-req">Connection Requests</Label>
-                      <p className="text-sm text-muted-foreground">When someone wants to connect with you</p>
-                    </div>
-                    <Switch
-                      id="conn-req"
-                      checked={settings.connectionRequests}
-                      onCheckedChange={(checked) => setSettings({ ...settings, connectionRequests: checked })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="messages">Messages</Label>
-                      <p className="text-sm text-muted-foreground">When you receive a new message</p>
-                    </div>
-                    <Switch
-                      id="messages"
-                      checked={settings.messages}
-                      onCheckedChange={(checked) => setSettings({ ...settings, messages: checked })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="projects">Project Updates</Label>
-                      <p className="text-sm text-muted-foreground">Updates on projects you follow</p>
-                    </div>
-                    <Switch
-                      id="projects"
-                      checked={settings.projectUpdates}
-                      onCheckedChange={(checked) => setSettings({ ...settings, projectUpdates: checked })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="digest">Weekly Digest</Label>
-                      <p className="text-sm text-muted-foreground">Summary of activity every week</p>
-                    </div>
-                    <Switch
-                      id="digest"
-                      checked={settings.weeklyDigest}
-                      onCheckedChange={(checked) => setSettings({ ...settings, weeklyDigest: checked })}
-                    />
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -291,44 +325,6 @@ export default function StudentSettingsPage() {
                     <option value="private">Private - Only you can see your profile</option>
                   </select>
                 </div>
-
-                <div className="h-px bg-border" />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label htmlFor="show-email">Show Email Address</Label>
-                    <p className="text-sm text-muted-foreground">Display your email on your profile</p>
-                  </div>
-                  <Switch
-                    id="show-email"
-                    checked={settings.showEmail}
-                    onCheckedChange={(checked) => setSettings({ ...settings, showEmail: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label htmlFor="show-phone">Show Phone Number</Label>
-                    <p className="text-sm text-muted-foreground">Display your phone number on your profile</p>
-                  </div>
-                  <Switch
-                    id="show-phone"
-                    checked={settings.showPhone}
-                    onCheckedChange={(checked) => setSettings({ ...settings, showPhone: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label htmlFor="allow-messages">Allow Messages from Anyone</Label>
-                    <p className="text-sm text-muted-foreground">Let anyone send you messages</p>
-                  </div>
-                  <Switch
-                    id="allow-messages"
-                    checked={settings.allowMessagesFromAnyone}
-                    onCheckedChange={(checked) => setSettings({ ...settings, allowMessagesFromAnyone: checked })}
-                  />
-                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -338,76 +334,11 @@ export default function StudentSettingsPage() {
             <Card className="border-border/50 shadow-sm">
               <CardHeader>
                 <CardTitle>Security Settings</CardTitle>
-                <CardDescription>Manage your password and security preferences</CardDescription>
+                <CardDescription>Manage security preferences</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
-                  <h4 className="font-medium">Change Password</h4>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="current-password">Current Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="current-password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Enter current password"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="new-password">New Password</Label>
-                    <Input id="new-password" type="password" placeholder="Enter new password" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="confirm-password">Confirm New Password</Label>
-                    <Input id="confirm-password" type="password" placeholder="Confirm new password" />
-                  </div>
-
-                  <Button className="w-full sm:w-auto">Update Password</Button>
-                </div>
-
-                <div className="h-px bg-border" />
-
-                <div className="space-y-4">
-                  <h4 className="font-medium">Two-Factor Authentication</h4>
-                  <p className="text-sm text-muted-foreground">Add an extra layer of security to your account</p>
-                  <Button variant="outline">Enable Two-Factor Authentication</Button>
-                </div>
-
-                <div className="h-px bg-border" />
-
-                <div className="space-y-4">
-                  <h4 className="font-medium">Active Sessions</h4>
-                  <p className="text-sm text-muted-foreground">Manage devices where you're currently logged in</p>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 border border-border rounded-lg">
-                      <div>
-                        <p className="font-medium">MacBook Pro</p>
-                        <p className="text-sm text-muted-foreground">San Francisco, CA • Active now</p>
-                      </div>
-                      <Badge variant="outline">Current</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-3 border border-border rounded-lg">
-                      <div>
-                        <p className="font-medium">iPhone 14</p>
-                        <p className="text-sm text-muted-foreground">San Francisco, CA • 2 hours ago</p>
-                      </div>
-                      <Button variant="ghost" size="sm">
-                        Revoke
-                      </Button>
-                    </div>
-                  </div>
+                  <p className="text-sm text-muted-foreground">Password and advanced settings are configured via your Auth Provider.</p>
                 </div>
               </CardContent>
             </Card>
@@ -416,10 +347,10 @@ export default function StudentSettingsPage() {
 
         {/* Save Button */}
         <div className="flex justify-end gap-3 pb-8">
-          <Button variant="outline">Cancel</Button>
-          <Button onClick={handleSave} className="gap-2">
-            <Save className="h-4 w-4" />
-            Save Changes
+          <Button variant="outline" onClick={() => router.back()}>Cancel</Button>
+          <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {isSaving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </motion.div>

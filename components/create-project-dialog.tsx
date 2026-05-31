@@ -8,14 +8,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, X, Send, Github, Globe } from "lucide-react"
+import { Plus, X, Send, Github, Globe, Loader2 } from "lucide-react"
+import { createProject } from "@/app/actions/get-dashboard-data"
+import { toast } from "sonner"
 
 interface CreateProjectDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
 }
 
-export default function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogProps) {
+export default function CreateProjectDialog({ open, onOpenChange, onSuccess }: CreateProjectDialogProps) {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [status, setStatus] = useState("in-progress")
@@ -23,6 +26,7 @@ export default function CreateProjectDialog({ open, onOpenChange }: CreateProjec
   const [newTech, setNewTech] = useState("")
   const [githubUrl, setGithubUrl] = useState("")
   const [liveUrl, setLiveUrl] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleAddTech = () => {
     if (newTech.trim() && !techStack.includes(newTech.trim())) {
@@ -35,16 +39,39 @@ export default function CreateProjectDialog({ open, onOpenChange }: CreateProjec
     setTechStack(techStack.filter((t) => t !== tech))
   }
 
-  const handleSubmit = () => {
-    console.log({ title, description, status, techStack, githubUrl, liveUrl })
-    onOpenChange(false)
-    // Reset form
-    setTitle("")
-    setDescription("")
-    setStatus("in-progress")
-    setTechStack([])
-    setGithubUrl("")
-    setLiveUrl("")
+  const handleSubmit = async () => {
+    setIsSubmitting(true)
+    try {
+      // Map frontend status string to backend enum
+      let backendStatus: "IN_PROGRESS" | "LOOKING_FOR_CONTRIBUTORS" | "COMPLETED" = "IN_PROGRESS"
+      if (status === "completed") {
+        backendStatus = "COMPLETED"
+      } else if (status === "looking") {
+        backendStatus = "LOOKING_FOR_CONTRIBUTORS"
+      }
+
+      const res = await createProject(title, description, techStack, backendStatus)
+      if (res.success) {
+        toast.success("Project shared successfully!")
+        onOpenChange(false)
+        // Reset form
+        setTitle("")
+        setDescription("")
+        setStatus("in-progress")
+        setTechStack([])
+        setGithubUrl("")
+        setLiveUrl("")
+        if (onSuccess) {
+          onSuccess()
+        }
+      } else {
+        toast.error(res.error || "Failed to share project")
+      }
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -64,6 +91,7 @@ export default function CreateProjectDialog({ open, onOpenChange }: CreateProjec
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="bg-sidebar-accent border-sidebar-border"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -75,13 +103,14 @@ export default function CreateProjectDialog({ open, onOpenChange }: CreateProjec
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="min-h-32 resize-none bg-sidebar-accent border-sidebar-border"
+              disabled={isSubmitting}
             />
             <p className="text-xs text-muted-foreground text-right">{description.length} / 500</p>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="status">Project Status</Label>
-            <Select value={status} onValueChange={setStatus}>
+            <Select value={status} onValueChange={setStatus} disabled={isSubmitting}>
               <SelectTrigger className="bg-sidebar-accent border-sidebar-border">
                 <SelectValue />
               </SelectTrigger>
@@ -107,8 +136,9 @@ export default function CreateProjectDialog({ open, onOpenChange }: CreateProjec
                   }
                 }}
                 className="bg-sidebar-accent border-sidebar-border"
+                disabled={isSubmitting}
               />
-              <Button type="button" onClick={handleAddTech} className="shrink-0 gap-2">
+              <Button type="button" onClick={handleAddTech} disabled={isSubmitting} className="shrink-0 gap-2">
                 <Plus className="h-4 w-4" />
                 Add
               </Button>
@@ -118,7 +148,7 @@ export default function CreateProjectDialog({ open, onOpenChange }: CreateProjec
                 {techStack.map((tech) => (
                   <Badge key={tech} variant="secondary" className="px-3 py-1.5 bg-primary/10 text-primary">
                     {tech}
-                    <button onClick={() => handleRemoveTech(tech)} className="ml-2 hover:text-primary-foreground">
+                    <button onClick={() => handleRemoveTech(tech)} disabled={isSubmitting} className="ml-2 hover:text-primary-foreground">
                       <X className="h-3 w-3" />
                     </button>
                   </Badge>
@@ -138,6 +168,7 @@ export default function CreateProjectDialog({ open, onOpenChange }: CreateProjec
                   value={githubUrl}
                   onChange={(e) => setGithubUrl(e.target.value)}
                   className="pl-10 bg-sidebar-accent border-sidebar-border"
+                  disabled={isSubmitting}
                 />
               </div>
             </div>
@@ -152,6 +183,7 @@ export default function CreateProjectDialog({ open, onOpenChange }: CreateProjec
                   value={liveUrl}
                   onChange={(e) => setLiveUrl(e.target.value)}
                   className="pl-10 bg-sidebar-accent border-sidebar-border"
+                  disabled={isSubmitting}
                 />
               </div>
             </div>
@@ -159,12 +191,16 @@ export default function CreateProjectDialog({ open, onOpenChange }: CreateProjec
         </div>
 
         <div className="flex gap-3 mt-6">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting} className="flex-1">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!title.trim() || !description.trim()} className="flex-1 gap-2">
-            <Send className="h-4 w-4" />
-            Create Project
+          <Button onClick={handleSubmit} disabled={!title.trim() || !description.trim() || isSubmitting} className="flex-1 gap-2">
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {isSubmitting ? "Creating..." : "Create Project"}
           </Button>
         </div>
       </DialogContent>

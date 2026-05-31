@@ -4,7 +4,7 @@ import { useState, useRef } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Upload, Loader2 } from "lucide-react"
-import { createSupabaseBrowserClient } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase"
 import { toast } from "sonner"
 
 interface ImageUploadProps {
@@ -16,7 +16,7 @@ interface ImageUploadProps {
 export function ImageUpload({ value, onChange, fallback = "U" }: ImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const supabase = createSupabaseBrowserClient()
+  const supabase = createClient()
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

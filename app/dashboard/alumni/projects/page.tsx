@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,59 +9,66 @@ import { Search, Filter, TrendingUp, HandHeart, MessageSquare } from "lucide-rea
 import DashboardLayout from "@/components/dashboard-layout"
 import StudentProjectFeedCard from "@/components/student-project-feed-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-const mockStudentProjects = [
-  {
-    id: "1",
-    student: "Lisa Chen",
-    avatar: "/asian-woman-student.jpg",
-    title: "Real-time Collaborative Code Editor",
-    description: "Built with WebSockets, React, and Node.js. Looking for feedback on architecture and scalability.",
-    techStack: ["React", "Node.js", "WebSocket", "MongoDB"],
-    likes: 23,
-    comments: 5,
-    timeAgo: "3 hours ago",
-  },
-  {
-    id: "2",
-    student: "Michael Brown",
-    avatar: "/diverse-students-studying.png",
-    title: "AI-Powered Resume Analyzer",
-    description:
-      "Uses NLP to analyze resumes and provide improvement suggestions. Need help with ML model optimization.",
-    techStack: ["Python", "TensorFlow", "FastAPI", "React"],
-    likes: 18,
-    comments: 8,
-    timeAgo: "6 hours ago",
-  },
-  {
-    id: "3",
-    student: "Raj Patel",
-    avatar: "/abstract-geometric-shapes.png",
-    title: "Blockchain Voting System",
-    description: "Secure and transparent voting platform. Seeking guidance on smart contract security best practices.",
-    techStack: ["Solidity", "Web3.js", "React", "Hardhat"],
-    likes: 34,
-    comments: 12,
-    timeAgo: "1 day ago",
-  },
-  {
-    id: "4",
-    student: "Emma Wilson",
-    avatar: "/asian-woman-student.jpg",
-    title: "Mental Health Support Bot",
-    description: "AI chatbot for mental health support. Looking for feedback on conversation design and ethics.",
-    techStack: ["Python", "NLP", "Flask", "React"],
-    likes: 45,
-    comments: 15,
-    timeAgo: "2 days ago",
-  },
-]
+import { getDiscoverProjects } from "@/app/actions/get-dashboard-data"
+import { createClient } from "@/lib/supabase"
 
 export default function AlumniProjectsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [techFilter, setTechFilter] = useState("all")
   const [departmentFilter, setDepartmentFilter] = useState("all")
+  const [projects, setProjects] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  const supabase = createClient()
+
+  const fetchProjects = async () => {
+    try {
+      const res = await getDiscoverProjects()
+      if (res.success && res.projects) {
+        setProjects(res.projects)
+      }
+    } catch (err) {
+      console.error("Alumni projects load error:", err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchProjects()
+
+    // 🌐 WebSockets real-time updates for projects
+    const channel = supabase
+      .channel("alumni-projects-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects" },
+        () => {
+          fetchProjects()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Filter projects based on search and filters
+  const filteredProjects = projects.filter((project) => {
+    const matchesSearch =
+      searchQuery === "" ||
+      project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.techStack.some((tech: string) => tech.toLowerCase().includes(searchQuery.toLowerCase()))
+
+    const matchesTech =
+      techFilter === "all" ||
+      project.techStack.some((tech: string) => tech.toLowerCase() === techFilter.toLowerCase())
+
+    return matchesSearch && matchesTech
+  })
 
   return (
     <DashboardLayout role="alumni">
@@ -79,8 +86,8 @@ export default function AlumniProjectsPage() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Projects Reviewed</p>
-                    <p className="text-3xl font-bold text-foreground">28</p>
+                    <p className="text-sm text-muted-foreground mb-1">Projects Shared</p>
+                    <p className="text-3xl font-bold text-foreground">{projects.length}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-card text-primary">
                     <HandHeart className="h-6 w-6" />
@@ -95,8 +102,10 @@ export default function AlumniProjectsPage() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Feedback Given</p>
-                    <p className="text-3xl font-bold text-foreground">156</p>
+                    <p className="text-sm text-muted-foreground mb-1">Total Tech Stacks</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {Array.from(new Set(projects.flatMap((p) => p.techStack))).length}
+                    </p>
                   </div>
                   <div className="p-3 rounded-xl bg-card text-accent">
                     <MessageSquare className="h-6 w-6" />
@@ -111,8 +120,8 @@ export default function AlumniProjectsPage() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">New This Week</p>
-                    <p className="text-3xl font-bold text-foreground">12</p>
+                    <p className="text-sm text-muted-foreground mb-1">Live Updates</p>
+                    <p className="text-3xl font-bold text-foreground">Realtime</p>
                   </div>
                   <div className="p-3 rounded-xl bg-card text-secondary">
                     <TrendingUp className="h-6 w-6" />
@@ -134,12 +143,12 @@ export default function AlumniProjectsPage() {
                     placeholder="Search projects by title, technology, or student..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 bg-background border-border"
+                    className="pl-10 bg-background border-border text-foreground"
                   />
                 </div>
                 <div className="flex gap-2">
                   <Select value={techFilter} onValueChange={setTechFilter}>
-                    <SelectTrigger className="w-48 bg-background">
+                    <SelectTrigger className="w-48 bg-background text-foreground">
                       <SelectValue placeholder="Technology" />
                     </SelectTrigger>
                     <SelectContent>
@@ -147,16 +156,6 @@ export default function AlumniProjectsPage() {
                       <SelectItem value="react">React</SelectItem>
                       <SelectItem value="python">Python</SelectItem>
                       <SelectItem value="ai">AI/ML</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                    <SelectTrigger className="w-48 bg-background">
-                      <SelectValue placeholder="Department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Departments</SelectItem>
-                      <SelectItem value="cs">Computer Science</SelectItem>
-                      <SelectItem value="ee">Electrical Engineering</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button variant="outline" size="icon">
@@ -172,23 +171,43 @@ export default function AlumniProjectsPage() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
           <Card className="glass border-border/50">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-foreground">
                 <TrendingUp className="h-5 w-5 text-primary" />
                 Recent Projects
               </CardTitle>
               <CardDescription>Help students improve their projects with your expertise</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {mockStudentProjects.map((project, index) => (
-                <motion.div
-                  key={project.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.6 + index * 0.1 }}
-                >
-                  <StudentProjectFeedCard project={project} />
-                </motion.div>
-              ))}
+              {isLoading ? (
+                <div className="flex justify-center items-center py-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : filteredProjects.length === 0 ? (
+                <p className="text-center py-10 text-muted-foreground">No student projects found.</p>
+              ) : (
+                filteredProjects.map((project, index) => (
+                  <motion.div
+                    key={project.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                  >
+                    <StudentProjectFeedCard
+                      project={{
+                        id: project.id,
+                        student: project.author,
+                        avatar: "/placeholder.svg",
+                        title: project.title,
+                        description: project.description,
+                        techStack: project.techStack,
+                        likes: project.likes,
+                        comments: 0,
+                        timeAgo: project.createdAt,
+                      }}
+                    />
+                  </motion.div>
+                ))
+              )}
             </CardContent>
           </Card>
         </motion.div>

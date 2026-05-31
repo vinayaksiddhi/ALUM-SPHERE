@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Building2, Calendar, UserPlus, MessageSquare } from "lucide-react"
+import { Building2, Calendar, UserPlus, MessageSquare, Clock } from "lucide-react"
+import { sendConnectionRequest } from "@/app/actions/connection-request"
+import { toast } from "sonner"
 
 interface AlumniCardProps {
   alumni: {
@@ -18,20 +20,31 @@ interface AlumniCardProps {
     expertise: string[]
     avatar: string
     isConnected: boolean
+    connectionStatus?: string | null
   }
 }
 
 export default function AlumniCard({ alumni }: AlumniCardProps) {
   const router = useRouter()
   const [isConnected, setIsConnected] = useState(alumni.isConnected)
+  const [connectionStatus, setConnectionStatus] = useState(alumni.connectionStatus)
   const [isLoading, setIsLoading] = useState(false)
 
   const handleConnect = async () => {
     setIsLoading(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    setIsConnected(true)
-    setIsLoading(false)
+    try {
+      const res = await sendConnectionRequest(alumni.id)
+      if (res.success) {
+        setConnectionStatus("PENDING")
+        toast.success("Connection request sent!")
+      } else {
+        toast.error(res.message || "Failed to send request")
+      }
+    } catch (error) {
+      toast.error("Something went wrong.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleMessage = () => {
@@ -75,15 +88,25 @@ export default function AlumniCard({ alumni }: AlumniCardProps) {
       </div>
 
       <div className="flex flex-col gap-2">
-        {isConnected ? (
+        {isConnected || connectionStatus === "ACCEPTED" ? (
           <Button
             size="sm"
             variant="outline"
-            className="gap-2 whitespace-nowrap bg-transparent"
+            className="gap-2 whitespace-nowrap bg-transparent text-primary hover:text-primary"
             onClick={handleMessage}
           >
             <MessageSquare className="h-3.5 w-3.5" />
             Message
+          </Button>
+        ) : connectionStatus === "PENDING" ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2 whitespace-nowrap bg-transparent text-primary hover:text-primary"
+            disabled={true}
+          >
+            <Clock className="h-3.5 w-3.5" />
+            Pending
           </Button>
         ) : (
           <Button size="sm" className="gap-2 whitespace-nowrap" onClick={handleConnect} disabled={isLoading}>

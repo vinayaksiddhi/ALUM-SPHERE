@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Button } from "@/components/ui/button"
@@ -8,53 +8,138 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { User, Bell, Lock, Shield, Eye, EyeOff, Save, Camera, Briefcase } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { User, Bell, Lock, Shield, Save, Loader2, Briefcase } from "lucide-react"
+import { getProfile, updateAvatarUrl } from "@/app/actions/get-profile"
+import { saveProfile } from "@/app/actions/save-profile"
+import { ImageUpload } from "@/components/image-upload"
+import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 export default function AlumniSettingsPage() {
-  const { toast } = useToast()
-  const [showPassword, setShowPassword] = useState(false)
-  const [settings, setSettings] = useState({
-    // Profile
-    name: "Sarah Johnson",
-    email: "sarah.j@techcorp.com",
-    bio: "Software Engineer at TechCorp, passionate about mentoring the next generation",
-    college: "MIT",
-    department: "Computer Science",
-    graduationYear: "2018",
-    company: "TechCorp",
-    position: "Senior Software Engineer",
-    expertise: ["Web Development", "Cloud Architecture", "Team Leadership"],
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [profile, setProfile] = useState<any>(null)
+  const [newExpertise, setNewExpertise] = useState("")
 
-    // Mentorship
+  const [settings, setSettings] = useState({
+    name: "",
+    email: "",
+    bio: "",
+    college: "",
+    department: "",
+    graduationYear: "",
+    company: "",
+    position: "",
+    expertise: [] as string[],
     availableForMentorship: true,
     maxStudents: 5,
-    preferredTopics: ["Career Advice", "Technical Skills", "Interview Prep"],
-
-    // Notifications
+    preferredTopics: ["Career Advice", "Technical Skills", "Interview Prep"] as string[],
     emailNotifications: true,
     pushNotifications: true,
     connectionRequests: true,
     messages: true,
     studentQuestions: true,
     weeklyReport: true,
-
-    // Privacy
     profileVisibility: "public",
     showEmail: false,
     showCompany: true,
     allowMessagesFromAnyone: false,
   })
 
-  const handleSave = () => {
-    toast({
-      title: "Settings saved",
-      description: "Your settings have been updated successfully.",
-    })
+  useEffect(() => {
+    async function loadSettings() {
+      setIsLoading(true)
+      const res = await getProfile()
+      if (res.success && res.profile) {
+        setProfile(res.profile)
+        const aProfile = (res.profile.alumni_profiles || {}) as any
+        setSettings((prev) => ({
+          ...prev,
+          name: res.profile.name || "",
+          email: res.profile.email || "",
+          bio: aProfile.biography || "",
+          college: aProfile.college || "",
+          department: aProfile.department || "",
+          graduationYear: aProfile.passing_year ? aProfile.passing_year.toString() : "",
+          company: aProfile.company || "",
+          position: aProfile.job_title || "",
+          expertise: aProfile.expertise || [],
+        }))
+      } else {
+        toast.error("Failed to load settings profile")
+      }
+      setIsLoading(false)
+    }
+    loadSettings()
+  }, [])
+
+  const handleAvatarChange = async (url: string) => {
+    const res = await updateAvatarUrl(url)
+    if (res.success) {
+      setProfile((prev: any) => ({
+        ...prev,
+        avatar_url: url
+      }))
+      toast.success("Profile photo updated!")
+    } else {
+      toast.error(res.error || "Failed to update profile photo")
+    }
+  }
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    const res = await saveProfile({
+      fullName: settings.name,
+      email: settings.email,
+      college: settings.college,
+      department: settings.department,
+      bio: settings.bio,
+      passingYear: settings.graduationYear,
+      company: settings.company,
+      jobRole: settings.position,
+      expertise: settings.expertise,
+    }, "alumni")
+
+    if (res.success) {
+      toast.success("Alumni profile settings saved successfully!")
+    } else {
+      toast.error(res.error || "Failed to save settings")
+    }
+    setIsSaving(false)
+  }
+
+  const handleAddExpertise = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && newExpertise.trim()) {
+      e.preventDefault()
+      if (!settings.expertise.includes(newExpertise.trim())) {
+        setSettings((prev) => ({
+          ...prev,
+          expertise: [...prev.expertise, newExpertise.trim()]
+        }))
+      }
+      setNewExpertise("")
+    }
+  }
+
+  const handleRemoveExpertise = (itemToRemove: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      expertise: prev.expertise.filter((t) => t !== itemToRemove)
+    }))
+  }
+
+  if (isLoading) {
+    return (
+      <DashboardLayout role="alumni">
+        <div className="flex h-[50vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
@@ -101,21 +186,17 @@ export default function AlumniSettingsPage() {
                 <CardDescription>Update your professional profile and public information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center gap-6">
-                  <Avatar className="h-24 w-24">
-                    <AvatarImage src="/professional-woman.png" />
-                    <AvatarFallback>SJ</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-                      <Camera className="h-4 w-4" />
-                      Change Photo
-                    </Button>
-                    <p className="text-sm text-muted-foreground mt-2">JPG, PNG or GIF. Max 2MB.</p>
-                  </div>
+                {/* Avatar Upload */}
+                <div className="flex flex-col items-start gap-4">
+                  <Label>Profile Picture</Label>
+                  <ImageUpload
+                    value={profile?.avatar_url}
+                    onChange={handleAvatarChange}
+                    fallback={settings.name || "A"}
+                  />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2 mt-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
                     <Input
@@ -197,15 +278,25 @@ export default function AlumniSettingsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Areas of Expertise</Label>
+                  <Label>Areas of Expertise (Press Enter to Add)</Label>
                   <div className="flex flex-wrap gap-2 mb-2">
                     {settings.expertise.map((skill, index) => (
-                      <Badge key={index} variant="secondary">
-                        {skill}
+                      <Badge
+                        key={index}
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground transition-all gap-1 py-1"
+                        onClick={() => handleRemoveExpertise(skill)}
+                      >
+                        {skill} <span className="text-[10px] opacity-70">×</span>
                       </Badge>
                     ))}
                   </div>
-                  <Input placeholder="Add an expertise area (press Enter)" />
+                  <Input
+                    placeholder="Add an expertise area and press Enter"
+                    value={newExpertise}
+                    onChange={(e) => setNewExpertise(e.target.value)}
+                    onKeyDown={handleAddExpertise}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -230,39 +321,11 @@ export default function AlumniSettingsPage() {
                     onCheckedChange={(checked) => setSettings({ ...settings, availableForMentorship: checked })}
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="max-students">Maximum Active Mentees</Label>
-                  <Input
-                    id="max-students"
-                    type="number"
-                    value={settings.maxStudents}
-                    onChange={(e) => setSettings({ ...settings, maxStudents: Number.parseInt(e.target.value) })}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Limit the number of students you can mentor simultaneously
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Preferred Mentorship Topics</Label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {settings.preferredTopics.map((topic, index) => (
-                      <Badge key={index} variant="secondary">
-                        {topic}
-                      </Badge>
-                    ))}
-                  </div>
-                  <Input placeholder="Add a topic (press Enter)" />
-                  <p className="text-sm text-muted-foreground">
-                    Topics you're most comfortable discussing with students
-                  </p>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Notification Settings */}
+          {/* Notifications / Privacy Settings */}
           <TabsContent value="notifications" className="space-y-6">
             <Card className="border-border/50 shadow-sm">
               <CardHeader>
@@ -281,77 +344,11 @@ export default function AlumniSettingsPage() {
                     onCheckedChange={(checked) => setSettings({ ...settings, emailNotifications: checked })}
                   />
                 </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label htmlFor="push-notif">Push Notifications</Label>
-                    <p className="text-sm text-muted-foreground">Receive push notifications on your device</p>
-                  </div>
-                  <Switch
-                    id="push-notif"
-                    checked={settings.pushNotifications}
-                    onCheckedChange={(checked) => setSettings({ ...settings, pushNotifications: checked })}
-                  />
-                </div>
-
-                <div className="h-px bg-border" />
-
-                <div className="space-y-4">
-                  <h4 className="font-medium">Activity Notifications</h4>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="conn-req">Connection Requests</Label>
-                      <p className="text-sm text-muted-foreground">When a student wants to connect</p>
-                    </div>
-                    <Switch
-                      id="conn-req"
-                      checked={settings.connectionRequests}
-                      onCheckedChange={(checked) => setSettings({ ...settings, connectionRequests: checked })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="messages">Messages</Label>
-                      <p className="text-sm text-muted-foreground">When you receive a new message</p>
-                    </div>
-                    <Switch
-                      id="messages"
-                      checked={settings.messages}
-                      onCheckedChange={(checked) => setSettings({ ...settings, messages: checked })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="questions">Student Questions</Label>
-                      <p className="text-sm text-muted-foreground">When students ask questions in your areas</p>
-                    </div>
-                    <Switch
-                      id="questions"
-                      checked={settings.studentQuestions}
-                      onCheckedChange={(checked) => setSettings({ ...settings, studentQuestions: checked })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="report">Weekly Impact Report</Label>
-                      <p className="text-sm text-muted-foreground">Summary of your mentorship impact</p>
-                    </div>
-                    <Switch
-                      id="report"
-                      checked={settings.weeklyReport}
-                      onCheckedChange={(checked) => setSettings({ ...settings, weeklyReport: checked })}
-                    />
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Privacy Settings */}
+          {/* Privacy & Security */}
           <TabsContent value="privacy" className="space-y-6">
             <Card className="border-border/50 shadow-sm">
               <CardHeader>
@@ -368,128 +365,21 @@ export default function AlumniSettingsPage() {
                     onChange={(e) => setSettings({ ...settings, profileVisibility: e.target.value })}
                   >
                     <option value="public">Public - All students can see your profile</option>
-                    <option value="same-college">Same College - Only students from your college</option>
                     <option value="connections">Connections Only - Only your connections</option>
                   </select>
-                </div>
-
-                <div className="h-px bg-border" />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label htmlFor="show-email">Show Email Address</Label>
-                    <p className="text-sm text-muted-foreground">Display your email on your profile</p>
-                  </div>
-                  <Switch
-                    id="show-email"
-                    checked={settings.showEmail}
-                    onCheckedChange={(checked) => setSettings({ ...settings, showEmail: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label htmlFor="show-company">Show Company Details</Label>
-                    <p className="text-sm text-muted-foreground">Display your company and position</p>
-                  </div>
-                  <Switch
-                    id="show-company"
-                    checked={settings.showCompany}
-                    onCheckedChange={(checked) => setSettings({ ...settings, showCompany: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label htmlFor="allow-messages">Allow Messages from Anyone</Label>
-                    <p className="text-sm text-muted-foreground">Let any student send you messages</p>
-                  </div>
-                  <Switch
-                    id="allow-messages"
-                    checked={settings.allowMessagesFromAnyone}
-                    onCheckedChange={(checked) => setSettings({ ...settings, allowMessagesFromAnyone: checked })}
-                  />
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Security Settings */}
           <TabsContent value="security" className="space-y-6">
             <Card className="border-border/50 shadow-sm">
               <CardHeader>
                 <CardTitle>Security Settings</CardTitle>
-                <CardDescription>Manage your password and security preferences</CardDescription>
+                <CardDescription>Manage security preferences</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <h4 className="font-medium">Change Password</h4>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="current-password">Current Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="current-password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Enter current password"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="new-password">New Password</Label>
-                    <Input id="new-password" type="password" placeholder="Enter new password" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="confirm-password">Confirm New Password</Label>
-                    <Input id="confirm-password" type="password" placeholder="Confirm new password" />
-                  </div>
-
-                  <Button className="w-full sm:w-auto">Update Password</Button>
-                </div>
-
-                <div className="h-px bg-border" />
-
-                <div className="space-y-4">
-                  <h4 className="font-medium">Two-Factor Authentication</h4>
-                  <p className="text-sm text-muted-foreground">Add an extra layer of security to your account</p>
-                  <Button variant="outline">Enable Two-Factor Authentication</Button>
-                </div>
-
-                <div className="h-px bg-border" />
-
-                <div className="space-y-4">
-                  <h4 className="font-medium">Active Sessions</h4>
-                  <p className="text-sm text-muted-foreground">Manage devices where you're currently logged in</p>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 border border-border rounded-lg">
-                      <div>
-                        <p className="font-medium">MacBook Pro</p>
-                        <p className="text-sm text-muted-foreground">Seattle, WA • Active now</p>
-                      </div>
-                      <Badge variant="outline">Current</Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-3 border border-border rounded-lg">
-                      <div>
-                        <p className="font-medium">iPad Pro</p>
-                        <p className="text-sm text-muted-foreground">Seattle, WA • 1 day ago</p>
-                      </div>
-                      <Button variant="ghost" size="sm">
-                        Revoke
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+                <p className="text-sm text-muted-foreground">Password and advanced settings are configured via your Auth Provider.</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -497,10 +387,10 @@ export default function AlumniSettingsPage() {
 
         {/* Save Button */}
         <div className="flex justify-end gap-3 pb-8">
-          <Button variant="outline">Cancel</Button>
-          <Button onClick={handleSave} className="gap-2">
-            <Save className="h-4 w-4" />
-            Save Changes
+          <Button variant="outline" onClick={() => router.back()}>Cancel</Button>
+          <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {isSaving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </motion.div>

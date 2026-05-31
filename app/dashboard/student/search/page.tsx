@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Search, Filter, X, MapPin, Briefcase, GraduationCap, Star } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import DashboardLayout from "@/components/dashboard-layout"
 import AlumniCard from "@/components/alumni-card"
+import { searchAlumni } from "@/app/actions/search-alumni"
 
 export default function SearchAlumniPage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -26,93 +27,23 @@ export default function SearchAlumniPage() {
     matchScore: [0],
   })
 
-  // Mock alumni data
-  const allAlumni = [
-    {
-      id: "1",
-      name: "Sarah Johnson",
-      role: "Senior Software Engineer",
-      company: "Google",
-      college: "Stanford University",
-      department: "Computer Science",
-      passingYear: "2018",
-      location: "San Francisco, CA",
-      expertise: ["React", "Node.js", "Cloud Architecture"],
-      avatar: "/professional-woman.png",
-      isConnected: false,
-      matchScore: 95,
-    },
-    {
-      id: "2",
-      name: "Michael Chen",
-      role: "Product Manager",
-      company: "Microsoft",
-      college: "Stanford University",
-      department: "Business Administration",
-      passingYear: "2019",
-      location: "Seattle, WA",
-      expertise: ["Product Strategy", "Data Analytics", "Agile"],
-      avatar: "/asian-professional-man.png",
-      isConnected: true,
-      matchScore: 88,
-    },
-    {
-      id: "3",
-      name: "Emily Rodriguez",
-      role: "UX Design Lead",
-      company: "Apple",
-      college: "Stanford University",
-      department: "Design",
-      passingYear: "2017",
-      location: "Cupertino, CA",
-      expertise: ["UI/UX Design", "Figma", "Design Systems"],
-      avatar: "/woman-engineer-at-work.png",
-      isConnected: false,
-      matchScore: 92,
-    },
-    {
-      id: "4",
-      name: "David Kim",
-      role: "Data Scientist",
-      company: "Amazon",
-      college: "Stanford University",
-      department: "Computer Science",
-      passingYear: "2020",
-      location: "Seattle, WA",
-      expertise: ["Machine Learning", "Python", "Big Data"],
-      avatar: "/placeholder.svg?height=100&width=100",
-      isConnected: false,
-      matchScore: 85,
-    },
-    {
-      id: "5",
-      name: "Jessica Brown",
-      role: "Marketing Director",
-      company: "Meta",
-      college: "Stanford University",
-      department: "Marketing",
-      passingYear: "2016",
-      location: "Menlo Park, CA",
-      expertise: ["Digital Marketing", "Brand Strategy", "SEO"],
-      avatar: "/placeholder.svg?height=100&width=100",
-      isConnected: false,
-      matchScore: 78,
-    },
-    {
-      id: "6",
-      name: "Robert Taylor",
-      role: "DevOps Engineer",
-      company: "Netflix",
-      college: "Stanford University",
-      department: "Computer Science",
-      passingYear: "2019",
-      location: "Los Gatos, CA",
-      expertise: ["AWS", "Docker", "Kubernetes"],
-      avatar: "/placeholder.svg?height=100&width=100",
-      isConnected: true,
-      matchScore: 90,
-    },
-  ]
+  const [allAlumni, setAllAlumni] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchAlumni() {
+      setIsLoading(true)
+      try {
+        const data = await searchAlumni()
+        setAllAlumni(data)
+      } catch (error) {
+        console.error("Failed to fetch alumni:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchAlumni()
+  }, [])
 
   // Filter alumni based on search and filters
   const filteredAlumni = allAlumni.filter((alumni) => {
@@ -121,7 +52,7 @@ export default function SearchAlumniPage() {
       alumni.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       alumni.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
       alumni.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      alumni.expertise.some((skill) => skill.toLowerCase().includes(searchQuery.toLowerCase()))
+      alumni.expertise.some((skill: string) => skill.toLowerCase().includes(searchQuery.toLowerCase()))
 
     const matchesCompany = filters.companies.length === 0 || filters.companies.includes(alumni.company)
 
@@ -419,7 +350,11 @@ export default function SearchAlumniPage() {
 
         {/* Alumni Grid */}
         <div className="space-y-4">
-          {sortedAlumni.length === 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : sortedAlumni.length === 0 ? (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-12">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
                 <Search className="h-8 w-8 text-muted-foreground" />

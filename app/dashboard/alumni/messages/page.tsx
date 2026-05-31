@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,128 +12,157 @@ import { Search, Send, Paperclip, Smile, MoreVertical, Phone, Video, Info } from
 import DashboardLayout from "@/components/dashboard-layout"
 import ChatMessage from "@/components/chat-message"
 import TypingIndicator from "@/components/typing-indicator"
-
-// Mock conversations for alumni
-const mockConversations = [
-  {
-    id: "1",
-    participant: {
-      name: "Alex Kumar",
-      avatar: "/diverse-students-studying.png",
-      role: "CS Student, 3rd Year",
-      online: true,
-    },
-    lastMessage: "Thank you so much for the advice!",
-    timestamp: "5 min ago",
-    unread: 1,
-  },
-  {
-    id: "2",
-    participant: {
-      name: "Emma Wilson",
-      avatar: "/asian-woman-student.jpg",
-      role: "CS Student, 4th Year",
-      online: false,
-    },
-    lastMessage: "I'll prepare the questions for our call",
-    timestamp: "2 hours ago",
-    unread: 0,
-  },
-  {
-    id: "3",
-    participant: {
-      name: "Raj Patel",
-      avatar: "/abstract-geometric-shapes.png",
-      role: "CS Student, 2nd Year",
-      online: true,
-    },
-    lastMessage: "Could we schedule a session next week?",
-    timestamp: "Yesterday",
-    unread: 2,
-  },
-]
-
-const mockMessages: {
-  id: string
-  senderId: string
-  content: string
-  timestamp: Date
-  status: "sent" | "delivered" | "read"
-}[] = [
-  {
-    id: "1",
-    senderId: "student",
-    content: "Hi! Thank you for accepting my connection request. I really admire your work at Google.",
-    timestamp: new Date(Date.now() - 7200000),
-    status: "read",
-  },
-  {
-    id: "2",
-    senderId: "alumni",
-    content: "Thank you! I'm happy to help. What would you like to know about?",
-    timestamp: new Date(Date.now() - 7100000),
-    status: "read",
-  },
-  {
-    id: "3",
-    senderId: "student",
-    content: "I'm curious about your career path and how you transitioned from college to Google.",
-    timestamp: new Date(Date.now() - 7000000),
-    status: "read",
-  },
-  {
-    id: "4",
-    senderId: "alumni",
-    content:
-      "It's a great question! After graduating, I started at a startup which gave me hands-on experience. That experience was crucial when I applied to Google.",
-    timestamp: new Date(Date.now() - 6900000),
-    status: "read",
-  },
-  {
-    id: "5",
-    senderId: "student",
-    content: "Thank you so much for the advice!",
-    timestamp: new Date(Date.now() - 300000),
-    status: "read",
-  },
-]
+import { getConversations, getMessages, sendMessage } from "@/app/actions/messages"
+import { createClient } from "@/lib/supabase"
+import { useSearchParams } from "next/navigation"
 
 export default function AlumniMessagesPage() {
-  const [selectedConversation, setSelectedConversation] = useState(mockConversations[0])
-  const [messages, setMessages] = useState(mockMessages)
+  const [conversations, setConversations] = useState<any[]>([])
+  const [selectedConversation, setSelectedConversation] = useState<any>(null)
+  const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [currentUserProfileId, setCurrentUserProfileId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return
+  const searchParams = useSearchParams()
+  const preselectedUserId = searchParams.get('user')
 
-    const message = {
-      id: Date.now().toString(),
-      senderId: "alumni",
-      content: newMessage,
-      timestamp: new Date(),
-      status: "sent" as const,
+  useEffect(() => {
+    async function fetchInitialData() {
+      setIsLoading(true)
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase.from('profiles').select('id').eq('clerk_id', user.id).single()
+          if (profile) setCurrentUserProfileId(profile.id)
+        }
+
+        const convos = await getConversations()
+        setConversations(convos)
+        
+        if (convos.length > 0) {
+          // If a user is preselected via URL, try to find that conversation
+          let toSelect = convos[0]
+          if (preselectedUserId) {
+             const pre = convos.find((c: any) => c.participant.id === preselectedUserId)
+             if (pre) toSelect = pre
+          }
+          setSelectedConversation(toSelect)
+        }
+      } catch (error) {
+        console.error("Failed to fetch conversations", error)
+      } finally {
+        setIsLoading(false)
+      }
     }
+    fetchInitialData()
+  }, [preselectedUserId])
 
-    setMessages([...messages, message])
+  // Use a stable string ID to prevent re-subscription loops
+  const selectedConversationId = selectedConversation?.id || null
+
+  useEffect(() => {
+    if (!selectedConversationId) return
+
+    let cancelled = false
+
+    const fetchMsgs = async () => {
+      const msgs = await getMessages(selectedConversationId)
+      if (cancelled) return
+      setMessages(msgs.map((m: any) => ({
+        id: m.id,
+        senderId: m.sender_id,
+        content: m.content,
+        timestamp: m.created_at,
+        status: "read",
+      })))
+    }
+    fetchMsgs()
+
+    // 🌐 WebSocket real-time chat using Supabase Broadcast for instant delivery
+    const supabase = createClient()
+    const channel = supabase.channel(`chat-${selectedConversationId}`, {
+      config: { broadcast: { self: false } }
+    })
+    
+    channel.on('broadcast', { event: 'new_message' }, (payload) => {
+      const newMsg = payload.payload
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMsg.id)) return prev
+        return [
+          ...prev,
+          {
+            id: newMsg.id,
+            senderId: newMsg.sender_id,
+            content: newMsg.content,
+            timestamp: newMsg.created_at,
+            status: "read",
+          }
+        ]
+      })
+    }).subscribe()
+
+    // Save channel to ref so we can broadcast from handleSendMessage
+    // @ts-ignore
+    window.__chatChannel = channel
+
+    return () => {
+      cancelled = true
+      supabase.removeChannel(channel)
+      // @ts-ignore
+      delete window.__chatChannel
+    }
+  }, [selectedConversationId])
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedConversation) return
+
+    const content = newMessage
     setNewMessage("")
+    
+    // Optimistic UI update
+    const tempId = `temp-${Date.now()}`
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        senderId: currentUserProfileId,
+        content: content,
+        timestamp: new Date(),
+        status: "sent" as const,
+      }
+    ])
 
-    // Simulate typing indicator and response
-    setTimeout(() => setIsTyping(true), 1000)
-    setTimeout(() => {
-      setIsTyping(false)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          senderId: "student",
-          content: "That makes perfect sense. Thank you!",
-          timestamp: new Date(),
-          status: "sent",
-        },
-      ])
-    }, 3000)
+    try {
+      const newMsg = await sendMessage(selectedConversation.id, content)
+      
+      // Update our own UI with the real database ID
+      setMessages((prev) => prev.map(m => m.id === tempId ? {
+        id: newMsg.id,
+        senderId: newMsg.sender_id || "",
+        content: newMsg.content,
+        timestamp: newMsg.created_at || new Date(),
+        status: "read"
+      } : m))
+
+      // 🌐 Instantly broadcast to the other user!
+      // @ts-ignore
+      if (window.__chatChannel) {
+        // @ts-ignore
+        window.__chatChannel.send({
+          type: 'broadcast',
+          event: 'new_message',
+          payload: newMsg
+        })
+      }
+      
+    } catch (error) {
+      console.error("Failed to send message", error)
+      setMessages((prev) => prev.filter(m => m.id !== tempId))
+    }
   }
 
   return (
@@ -167,14 +196,18 @@ export default function AlumniMessagesPage() {
 
               <ScrollArea className="flex-1">
                 <div className="p-2 space-y-1">
-                  {mockConversations.map((conversation) => (
+                  {isLoading ? (
+                    <div className="flex justify-center p-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div></div>
+                  ) : conversations.length === 0 ? (
+                    <div className="text-center p-4 text-muted-foreground">No conversations yet</div>
+                  ) : conversations.map((conversation) => (
                     <motion.button
                       key={conversation.id}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setSelectedConversation(conversation)}
                       className={`w-full p-3 rounded-lg text-left transition-all ${
-                        selectedConversation.id === conversation.id
+                        selectedConversation?.id === conversation.id
                           ? "bg-primary/10 border border-primary/20"
                           : "hover:bg-card border border-transparent"
                       }`}
@@ -193,7 +226,7 @@ export default function AlumniMessagesPage() {
                           <div className="flex items-center justify-between mb-1">
                             <p className="font-semibold text-foreground truncate">{conversation.participant.name}</p>
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
-                              {conversation.timestamp}
+                              {conversation.timestamp ? new Date(conversation.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                             </span>
                           </div>
                           <p className="text-sm text-muted-foreground truncate">{conversation.lastMessage}</p>
@@ -218,6 +251,8 @@ export default function AlumniMessagesPage() {
           >
             <Card className="glass border-border/50 h-full flex flex-col">
               {/* Chat Header */}
+              {selectedConversation ? (
+                <>
               <div className="p-4 border-b border-border/50 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="relative">
@@ -262,7 +297,7 @@ export default function AlumniMessagesPage() {
                     >
                       <ChatMessage
                         message={message}
-                        isOwn={message.senderId === "alumni"}
+                        isOwn={message.senderId === currentUserProfileId}
                         participant={selectedConversation.participant}
                       />
                     </motion.div>
@@ -307,6 +342,12 @@ export default function AlumniMessagesPage() {
                   </Button>
                 </div>
               </div>
+              </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                  Select a conversation to start messaging
+                </div>
+              )}
             </Card>
           </motion.div>
         </div>

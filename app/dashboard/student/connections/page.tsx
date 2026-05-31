@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,73 +11,91 @@ import { Search, Sparkles, Filter, Users, TrendingUp } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import AlumniCard from "@/components/alumni-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-// Mock data with matching scores
-const mockSuggestedAlumni = [
-  {
-    id: "1",
-    name: "Sarah Johnson",
-    role: "Senior Software Engineer",
-    company: "Google",
-    college: "MIT",
-    department: "Computer Science",
-    passingYear: "2018",
-    expertise: ["React", "System Design", "Cloud Architecture"],
-    avatar: "/professional-woman.png",
-    isConnected: false,
-    matchScore: 95,
-    matchReasons: ["Same college", "Same department", "Expertise match: React"],
-  },
-  {
-    id: "2",
-    name: "Michael Chen",
-    role: "Product Manager",
-    company: "Microsoft",
-    college: "MIT",
-    department: "Computer Science",
-    passingYear: "2017",
-    expertise: ["Product Strategy", "User Research", "Agile"],
-    avatar: "/asian-professional-man.png",
-    isConnected: false,
-    matchScore: 92,
-    matchReasons: ["Same college", "Same department", "Active mentor"],
-  },
-  {
-    id: "3",
-    name: "Emily Rodriguez",
-    role: "Machine Learning Engineer",
-    company: "Tesla",
-    college: "MIT",
-    department: "Computer Science",
-    passingYear: "2019",
-    expertise: ["Deep Learning", "Python", "TensorFlow"],
-    avatar: "/woman-engineer-at-work.png",
-    isConnected: true,
-    matchScore: 88,
-    matchReasons: ["Same college", "Expertise match: Machine Learning"],
-  },
-  {
-    id: "4",
-    name: "David Park",
-    role: "Full Stack Developer",
-    company: "Amazon",
-    college: "MIT",
-    department: "Computer Science",
-    passingYear: "2020",
-    expertise: ["JavaScript", "Node.js", "AWS"],
-    avatar: "/asian-professional-man.png",
-    isConnected: false,
-    matchScore: 85,
-    matchReasons: ["Same college", "Same department", "Recently graduated"],
-  },
-]
-
-const mockConnectedAlumni = mockSuggestedAlumni.filter((a) => a.isConnected)
+import { getConnections } from "@/app/actions/get-connections"
+import { searchAlumni } from "@/app/actions/search-alumni"
+import { toast } from "sonner"
+import { createClient } from "@/lib/supabase"
 
 export default function ConnectionsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [departmentFilter, setDepartmentFilter] = useState("all")
   const [companyFilter, setCompanyFilter] = useState("all")
+
+  const [suggestedAlumni, setSuggestedAlumni] = useState<any[]>([])
+  const [connectedAlumni, setConnectedAlumni] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchData() {
+      setIsLoading(true)
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        let currentUserProfileId = ""
+        if (user) {
+          const { data: profile } = await supabase.from('profiles').select('id').eq('clerk_id', user.id).single()
+          if (profile) currentUserProfileId = profile.id
+        }
+
+        const [connections, allAlumni] = await Promise.all([
+          getConnections(),
+          searchAlumni()
+        ])
+
+        const acceptedConnections = connections.filter(c => c.status === "ACCEPTED")
+        
+        // Map connected alumni to AlumniCard format
+        const mappedConnected = acceptedConnections.map(c => {
+          const alumniUser = c.sender_id === currentUserProfileId ? c.profiles_connection_requests_receiver_idToprofiles : c.profiles_connection_requests_sender_idToprofiles
+          if (!alumniUser) return null;
+          const alumniData = alumniUser.alumni_profiles
+          return {
+            id: alumniUser.id,
+            name: alumniUser.name,
+            role: alumniData?.job_title || "Alumni",
+            company: alumniData?.company || "Unknown Company",
+            college: alumniData?.college,
+            department: alumniData?.department,
+            passingYear: alumniData?.passing_year?.toString() || "",
+            expertise: alumniData?.expertise || [],
+            avatar: alumniUser.avatar_url || "/placeholder.svg?height=100&width=100",
+            isConnected: true,
+            matchScore: 90
+          }
+        }).filter(Boolean) as any[]
+
+        setConnectedAlumni(mappedConnected)
+        
+        // Exclude connected from suggested
+        const connectedIds = new Set(mappedConnected.map(a => a.id))
+        setSuggestedAlumni(allAlumni.filter(a => !connectedIds.has(a.id) && a.matchScore > 50).slice(0, 10))
+        
+      } catch (error) {
+        toast.error("Failed to fetch connections")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchData()
+
+    // 🌐 WebSockets real-time updates — debounced
+    const supabase = createClient()
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    const debouncedReload = () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => { fetchData() }, 2000)
+    }
+
+    const channel = supabase
+      .channel("student-connections-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "connection_requests" }, debouncedReload)
+      .subscribe()
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   return (
     <DashboardLayout role="student">
@@ -96,7 +114,7 @@ export default function ConnectionsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Connected Alumni</p>
-                    <p className="text-3xl font-bold text-foreground">12</p>
+                    <p className="text-3xl font-bold text-foreground">{connectedAlumni.length}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-card text-primary">
                     <Users className="h-6 w-6" />
@@ -112,7 +130,7 @@ export default function ConnectionsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">New Suggestions</p>
-                    <p className="text-3xl font-bold text-foreground">8</p>
+                    <p className="text-3xl font-bold text-foreground">{suggestedAlumni.length}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-card text-accent">
                     <Sparkles className="h-6 w-6" />
@@ -128,7 +146,9 @@ export default function ConnectionsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Avg Match Score</p>
-                    <p className="text-3xl font-bold text-foreground">89%</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {suggestedAlumni.length > 0 ? Math.round(suggestedAlumni.reduce((sum, a) => sum + a.matchScore, 0) / suggestedAlumni.length) : 0}%
+                    </p>
                   </div>
                   <div className="p-3 rounded-xl bg-card text-secondary">
                     <TrendingUp className="h-6 w-6" />
@@ -190,9 +210,9 @@ export default function ConnectionsPage() {
           <Tabs defaultValue="suggested" className="space-y-6">
             <TabsList className="grid w-full max-w-md grid-cols-2">
               <TabsTrigger value="suggested">
-                Suggested ({mockSuggestedAlumni.filter((a) => !a.isConnected).length})
+                Suggested ({suggestedAlumni.length})
               </TabsTrigger>
-              <TabsTrigger value="connected">Connected ({mockConnectedAlumni.length})</TabsTrigger>
+              <TabsTrigger value="connected">Connected ({connectedAlumni.length})</TabsTrigger>
             </TabsList>
 
             <TabsContent value="suggested" className="space-y-4">
@@ -205,8 +225,12 @@ export default function ConnectionsPage() {
                   <CardDescription>Alumni matched based on your college, department, and interests</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {mockSuggestedAlumni
-                    .filter((a) => !a.isConnected)
+                  {isLoading ? (
+                    <div className="flex justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+                  ) : suggestedAlumni.length === 0 ? (
+                     <div className="text-center p-8 text-muted-foreground">No suggestions found.</div>
+                  ) : (
+                  suggestedAlumni
                     .map((alumni, index) => (
                       <motion.div
                         key={alumni.id}
@@ -230,22 +254,12 @@ export default function ConnectionsPage() {
                                   className="h-full bg-gradient-to-r from-primary via-accent to-secondary"
                                 />
                               </div>
-                              <div className="flex flex-wrap gap-1.5 mt-2">
-                                {alumni.matchReasons.map((reason) => (
-                                  <Badge
-                                    key={reason}
-                                    variant="secondary"
-                                    className="text-xs bg-primary/10 text-primary"
-                                  >
-                                    {reason}
-                                  </Badge>
-                                ))}
-                              </div>
                             </div>
                           </div>
                         </div>
                       </motion.div>
-                    ))}
+                    ))
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -260,7 +274,12 @@ export default function ConnectionsPage() {
                   <CardDescription>Alumni you're connected with</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {mockConnectedAlumni.map((alumni, index) => (
+                  {isLoading ? (
+                    <div className="flex justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+                  ) : connectedAlumni.length === 0 ? (
+                     <div className="text-center p-8 text-muted-foreground">No alumni connected yet.</div>
+                  ) : (
+                  connectedAlumni.map((alumni, index) => (
                     <motion.div
                       key={alumni.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -269,7 +288,8 @@ export default function ConnectionsPage() {
                     >
                       <AlumniCard alumni={alumni} />
                     </motion.div>
-                  ))}
+                  ))
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

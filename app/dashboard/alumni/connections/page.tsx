@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,86 +11,86 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Search, Users, MessageSquare, GraduationCap } from "lucide-react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-const mockConnectedStudents = [
-  {
-    id: "1",
-    name: "harshit raj",
-    year: "3rd Year",
-    department: "Computer Science",
-    college: "MIT",
-    interests: ["Web Development", "AI/ML", "Cybersecurity"],
-    avatar: "/placeholder.svg",
-    lastActive: "2 hours ago",
-    connectionDate: "2 weeks ago",
-  },
-  {
-    id: "2",
-    name: "Emma Wilson",
-    year: "4th Year",
-    department: "Computer Science",
-    college: "MIT",
-    interests: ["Product Management", "UX Design", "Startups"],
-    avatar: "/placeholder.svg",
-    lastActive: "1 day ago",
-    connectionDate: "1 month ago",
-  },
-  {
-    id: "3",
-    name: "Raj Patel",
-    year: "2nd Year",
-    department: "Computer Science",
-    college: "MIT",
-    interests: ["Data Science", "Machine Learning", "Python"],
-    avatar: "/placeholder.svg",
-    lastActive: "5 hours ago",
-    connectionDate: "3 days ago",
-  },
-]
-
-const mockOtherAlumni = [
-  {
-    id: "4",
-    name: "Robert Chen",
-    role: "Tech Lead",
-    company: "Apple",
-    college: "MIT",
-    department: "Computer Science",
-    passingYear: "2016",
-    expertise: ["iOS Development", "Swift", "Mobile Architecture"],
-    avatar: "/asian-professional-man.png",
-    isConnected: false,
-  },
-  {
-    id: "5",
-    name: "Lisa Martinez",
-    role: "Data Scientist",
-    company: "Netflix",
-    college: "MIT",
-    department: "Computer Science",
-    passingYear: "2017",
-    expertise: ["Machine Learning", "Big Data", "Python"],
-    avatar: "/professional-woman.png",
-    isConnected: true,
-  },
-  {
-    id: "6",
-    name: "James Taylor",
-    role: "Engineering Manager",
-    company: "Uber",
-    college: "MIT",
-    department: "Computer Science",
-    passingYear: "2015",
-    expertise: ["Distributed Systems", "Leadership", "Scalability"],
-    avatar: "/placeholder.svg",
-    isConnected: false,
-  },
-]
+import { getConnections, updateConnectionStatus } from "@/app/actions/get-connections"
+import { toast } from "sonner"
+import { createClient } from "@/lib/supabase"
 
 export default function AlumniConnectionsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [yearFilter, setYearFilter] = useState("all")
   const [departmentFilter, setDepartmentFilter] = useState("all")
+  
+  const [connections, setConnections] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [currentUserProfileId, setCurrentUserProfileId] = useState<string | null>(null)
+
+  const fetchData = async () => {
+    setIsLoading(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // Fetch current user's profile ID
+        const { data: profile } = await supabase.from('profiles').select('id').eq('clerk_id', user.id).single()
+        if (profile) setCurrentUserProfileId(profile.id)
+      }
+      
+      const data = await getConnections()
+      setConnections(data)
+    } catch (error) {
+      console.error(error)
+      toast.error("Failed to load connections.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+
+    // 🌐 WebSockets real-time updates — debounced
+    const supabase = createClient()
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    const debouncedReload = () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => { fetchData() }, 2000)
+    }
+
+    const channel = supabase
+      .channel("alumni-connections-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "connection_requests" }, debouncedReload)
+      .subscribe()
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  const handleUpdateStatus = async (id: string, status: "ACCEPTED" | "REJECTED") => {
+    try {
+      const res = await updateConnectionStatus(id, status)
+      if (res.success) {
+        toast.success(`Request ${status.toLowerCase()}`)
+        fetchData()
+      }
+    } catch (error) {
+      toast.error("Failed to update status")
+    }
+  }
+
+  const incomingRequests = connections.filter(c => c.receiver_id === currentUserProfileId && c.status === "PENDING")
+  const acceptedConnections = connections.filter(c => c.status === "ACCEPTED")
+
+  const mentoringStudents = acceptedConnections.filter(c => {
+    const otherPerson = c.sender_id === currentUserProfileId ? c.profiles_connection_requests_receiver_idToprofiles : c.profiles_connection_requests_sender_idToprofiles
+    return otherPerson?.role === "STUDENT"
+  })
+
+  const otherAlumni = acceptedConnections.filter(c => {
+    const otherPerson = c.sender_id === currentUserProfileId ? c.profiles_connection_requests_receiver_idToprofiles : c.profiles_connection_requests_sender_idToprofiles
+    return otherPerson?.role === "ALUMNI"
+  })
 
   return (
     <DashboardLayout role="alumni">
@@ -109,7 +109,7 @@ export default function AlumniConnectionsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Students Mentoring</p>
-                    <p className="text-3xl font-bold text-foreground">{mockConnectedStudents.length}</p>
+                    <p className="text-3xl font-bold text-foreground">{mentoringStudents.length}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-card text-primary">
                     <GraduationCap className="h-6 w-6" />
@@ -126,7 +126,7 @@ export default function AlumniConnectionsPage() {
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Alumni Connections</p>
                     <p className="text-3xl font-bold text-foreground">
-                      {mockOtherAlumni.filter((a) => a.isConnected).length}
+                      {otherAlumni.length}
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-card text-accent">
@@ -143,7 +143,7 @@ export default function AlumniConnectionsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Active Chats</p>
-                    <p className="text-3xl font-bold text-foreground">8</p>
+                    <p className="text-3xl font-bold text-foreground">{acceptedConnections.length}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-card text-secondary">
                     <MessageSquare className="h-6 w-6" />
@@ -200,11 +200,57 @@ export default function AlumniConnectionsPage() {
 
         {/* Tabs */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
-          <Tabs defaultValue="students" className="space-y-6">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="students">Students ({mockConnectedStudents.length})</TabsTrigger>
-              <TabsTrigger value="alumni">Alumni ({mockOtherAlumni.filter((a) => a.isConnected).length})</TabsTrigger>
+          <Tabs defaultValue="requests" className="space-y-6">
+            <TabsList className="grid w-full max-w-2xl grid-cols-3">
+              <TabsTrigger value="requests">Requests ({incomingRequests.length})</TabsTrigger>
+              <TabsTrigger value="students">Students ({mentoringStudents.length})</TabsTrigger>
+              <TabsTrigger value="alumni">Alumni ({otherAlumni.length})</TabsTrigger>
             </TabsList>
+            
+            <TabsContent value="requests" className="space-y-4">
+              <Card className="glass border-border/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary" />
+                    Incoming Requests
+                  </CardTitle>
+                  <CardDescription>People who want to connect with you</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {isLoading ? (
+                    <div className="flex justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+                  ) : incomingRequests.length === 0 ? (
+                     <div className="text-center p-8 text-muted-foreground">No pending requests.</div>
+                  ) : (
+                    incomingRequests.map((req, index) => {
+                      const sender = req.profiles_connection_requests_sender_idToprofiles
+                      const senderProfile = sender.role === "STUDENT" ? sender.student_profiles : sender.alumni_profiles
+                      return (
+                      <motion.div key={req.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * index }}>
+                        <Card className="glass border-border/50">
+                          <CardContent className="p-6">
+                            <div className="flex items-start gap-4">
+                              <Avatar className="h-14 w-14">
+                                <AvatarImage src={sender?.avatar_url || "/placeholder.svg"} />
+                                <AvatarFallback>{sender?.name?.charAt(0)}</AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-lg text-foreground">{sender?.name}</h3>
+                                <p className="text-sm text-muted-foreground">{sender?.role === "STUDENT" ? "Student" : "Alumni"} at {senderProfile?.college}</p>
+                                <div className="mt-2 flex gap-2">
+                                   <Button size="sm" onClick={() => handleUpdateStatus(req.id, "ACCEPTED")}>Accept</Button>
+                                   <Button size="sm" variant="outline" onClick={() => handleUpdateStatus(req.id, "REJECTED")}>Decline</Button>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    )})
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="students" className="space-y-4">
               <Card className="glass border-border/50">
@@ -216,62 +262,60 @@ export default function AlumniConnectionsPage() {
                   <CardDescription>Students connected to you for guidance and mentorship</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {mockConnectedStudents.map((student, index) => (
-                    <motion.div
-                      key={student.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.1 * index }}
-                    >
-                      <Card className="glass border-border/50 hover:shadow-lg transition-shadow">
-                        <CardContent className="p-6">
-                          <div className="flex items-start gap-4">
-                            <Avatar className="h-14 w-14">
-                              <AvatarImage src={student.avatar || "/placeholder.svg"} />
-                              <AvatarFallback>
-                                {student.name
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 space-y-3">
-                              <div>
-                                <h3 className="font-semibold text-lg text-foreground">{student.name}</h3>
-                                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
-                                    {student.year}
-                                  </Badge>
-                                  <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20">
-                                    {student.department}
-                                  </Badge>
-                                  <span className="text-sm text-muted-foreground">{student.college}</span>
+                  {isLoading ? (
+                    <div className="flex justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+                  ) : mentoringStudents.length === 0 ? (
+                     <div className="text-center p-8 text-muted-foreground">No students connected yet.</div>
+                  ) : (
+                    mentoringStudents.map((conn, index) => {
+                      const studentUser = conn.sender_id === currentUserProfileId ? conn.profiles_connection_requests_receiver_idToprofiles : conn.profiles_connection_requests_sender_idToprofiles
+                      const studentData = studentUser.student_profiles
+                      return (
+                      <motion.div
+                        key={conn.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 * index }}
+                      >
+                        <Card className="glass border-border/50 hover:shadow-lg transition-shadow">
+                          <CardContent className="p-6">
+                            <div className="flex items-start gap-4">
+                              <Avatar className="h-14 w-14">
+                                <AvatarImage src={studentUser.avatar_url || "/placeholder.svg"} />
+                                <AvatarFallback>
+                                  {studentUser.name?.charAt(0)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 space-y-3">
+                                <div>
+                                  <h3 className="font-semibold text-lg text-foreground">{studentUser.name}</h3>
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20">
+                                      {studentData?.department}
+                                    </Badge>
+                                    <span className="text-sm text-muted-foreground">{studentData?.college}</span>
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {student.interests.map((interest) => (
-                                  <Badge key={interest} variant="secondary" className="text-xs">
-                                    {interest}
-                                  </Badge>
-                                ))}
-                              </div>
-                              <div className="flex items-center justify-between pt-2">
-                                <div className="text-sm text-muted-foreground">
-                                  <span>Connected {student.connectionDate}</span>
-                                  <span className="mx-2">•</span>
-                                  <span>Active {student.lastActive}</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {studentData?.skills?.map((skill: string) => (
+                                    <Badge key={skill} variant="secondary" className="text-xs">
+                                      {skill}
+                                    </Badge>
+                                  ))}
                                 </div>
-                                <Button size="sm" className="bg-primary hover:bg-primary/90">
-                                  <MessageSquare className="h-4 w-4 mr-2" />
-                                  Message
-                                </Button>
+                                <div className="flex items-center justify-between pt-2">
+                                  <Button size="sm" className="bg-primary hover:bg-primary/90">
+                                    <MessageSquare className="h-4 w-4 mr-2" />
+                                    Message
+                                  </Button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  ))}
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    )})
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -286,50 +330,53 @@ export default function AlumniConnectionsPage() {
                   <CardDescription>Connect with other alumni from your college</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {mockOtherAlumni.map((alumni, index) => (
-                    <motion.div
-                      key={alumni.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.1 * index }}
-                    >
-                      <Card className="glass border-border/50 hover:shadow-lg transition-shadow">
-                        <CardContent className="p-6">
-                          <div className="flex items-start gap-4">
-                            <Avatar className="h-14 w-14">
-                              <AvatarImage src={alumni.avatar || "/placeholder.svg"} />
-                              <AvatarFallback>
-                                {alumni.name
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 space-y-3">
-                              <div>
-                                <h3 className="font-semibold text-lg text-foreground">{alumni.name}</h3>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  {alumni.role} at {alumni.company}
-                                </p>
-                                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
-                                    Class of {alumni.passingYear}
-                                  </Badge>
-                                  <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20">
-                                    {alumni.department}
-                                  </Badge>
+                  {isLoading ? (
+                    <div className="flex justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+                  ) : otherAlumni.length === 0 ? (
+                     <div className="text-center p-8 text-muted-foreground">No alumni connected yet.</div>
+                  ) : (
+                    otherAlumni.map((conn, index) => {
+                      const alumniUser = conn.sender_id === currentUserProfileId ? conn.profiles_connection_requests_receiver_idToprofiles : conn.profiles_connection_requests_sender_idToprofiles
+                      const alumniData = alumniUser.alumni_profiles
+                      return (
+                      <motion.div
+                        key={conn.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 * index }}
+                      >
+                        <Card className="glass border-border/50 hover:shadow-lg transition-shadow">
+                          <CardContent className="p-6">
+                            <div className="flex items-start gap-4">
+                              <Avatar className="h-14 w-14">
+                                <AvatarImage src={alumniUser.avatar_url || "/placeholder.svg"} />
+                                <AvatarFallback>
+                                  {alumniUser.name?.charAt(0)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 space-y-3">
+                                <div>
+                                  <h3 className="font-semibold text-lg text-foreground">{alumniUser.name}</h3>
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    {alumniData?.job_title} at {alumniData?.company}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                    <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                                      Class of {alumniData?.passing_year}
+                                    </Badge>
+                                    <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20">
+                                      {alumniData?.department}
+                                    </Badge>
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {alumni.expertise.map((skill) => (
-                                  <Badge key={skill} variant="secondary" className="text-xs">
-                                    {skill}
-                                  </Badge>
-                                ))}
-                              </div>
-                              <div className="flex items-center gap-2 pt-2">
-                                {alumni.isConnected ? (
-                                  <>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {alumniData?.expertise?.map((skill: string) => (
+                                    <Badge key={skill} variant="secondary" className="text-xs">
+                                      {skill}
+                                    </Badge>
+                                  ))}
+                                </div>
+                                <div className="flex items-center gap-2 pt-2">
                                     <Button size="sm" className="bg-primary hover:bg-primary/90">
                                       <MessageSquare className="h-4 w-4 mr-2" />
                                       Message
@@ -337,25 +384,14 @@ export default function AlumniConnectionsPage() {
                                     <Button size="sm" variant="outline">
                                       View Profile
                                     </Button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Button size="sm" className="bg-accent hover:bg-accent/90">
-                                      <Users className="h-4 w-4 mr-2" />
-                                      Connect
-                                    </Button>
-                                    <Button size="sm" variant="outline">
-                                      View Profile
-                                    </Button>
-                                  </>
-                                )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  ))}
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    )})
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

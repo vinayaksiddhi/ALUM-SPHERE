@@ -1,99 +1,96 @@
-# AlumSphere 🎓
+# Alum-Sphere 🎓🚀
 
-AlumSphere is a modern, high-performance web platform designed to bridge the gap between university students and alumni. It features a high-tech "glassmorphic" UI, intelligent matching algorithms, and role-based dashboards for networking, mentorship, and career growth.
+Alum-Sphere is a cutting-edge platform designed to bridge the gap between students and university alumni. Built with modern web technologies, it facilitates dynamic mentorship matching, real-time messaging, project collaboration, and robust Q&A sessions.
 
----
+## 🌟 Key Features
 
-## 🚀 Tech Stack
+### 1. Student & Alumni Portals
+- **Role-Based Dashboards:** Separate, tailored experiences for Students and Alumni.
+- **Matchmaking Engine:** Connects students with alumni based on colleges, graduation years, industry expertise, and departments.
+- **Dynamic Portfolios:** Alumni and students can manage their bios, technical skills, and project showcases.
 
-- **Framework:** [Next.js 16](https://nextjs.org/) (App Router, Turbopack enabled)
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS + Custom Animations
-- **UI Components:** [shadcn/ui](https://ui.shadcn.com/) + [Framer Motion](https://www.framer.com/motion/)
-- **Authentication:** [Supabase Auth](https://supabase.com/docs/guides/auth) (SSR integration)
-- **Database:** PostgreSQL (hosted on Supabase)
-- **ORM:** [Prisma](https://www.prisma.io/)
+### 2. Real-Time WhatsApp-Style Chat
+- **Instant Messaging:** Built with **Supabase Broadcast Channels** for sub-100ms message delivery without refreshing.
+- **Optimistic UI:** Messages appear instantly on the sender's screen while resolving in the background.
+- **Real-Time Notification Badges:** Sidebar indicators alert you to new messages instantly.
 
----
+### 3. Connections Network
+- **Connection Requests:** Students can send mentorship requests to alumni.
+- **Status Updates:** Track request statuses (Pending, Accepted, Rejected) in real-time.
+- **Automatic Match Syncing:** Acceptance of a connection immediately spins up a secure conversation channel between the users.
 
-## ✨ Key Features
+### 4. Q&A and Discussions
+- **Collegiate Q&A:** A dedicated space for students to ask questions and alumni to provide industry insights.
+- **Real-Time Commenting:** Add comments and engage in discussions that sync instantly across all clients.
+- **Like Systems:** Upvote helpful questions to highlight trending collegiate topics.
 
-1. **Role-Based Architecture:** Dedicated onboarding flows and customized dashboards for `STUDENT` and `ALUMNI`.
-2. **Magic Link & OAuth Authentication:** Secure passwordless email login and Google OAuth powered by Supabase.
-3. **Just-in-Time (JIT) Provisioning:** Automatic database record synchronization immediately after authentication.
-4. **Intelligent Matching Algorithm:** Matches students with relevant alumni based on department, skills, and areas of interest/expertise.
-5. **Connection System:** Send and receive connection requests directly within the platform.
-6. **Premium UI/UX:** Dark-mode native, glowing gradients, micro-interactions, and glassmorphism cards.
+### 5. Project Showcases
+- **Prototype Sharing:** Students can post "Looking for Contributors" or "In Progress" projects.
+- **Tech Stack Filtering:** Projects display clear technology tags for easy discovery.
+- **Real-Time Project Feeds:** New projects appear dynamically in the dashboard feeds as soon as they are posted.
 
----
+## 🛠️ Technology Stack
 
-## 🏗️ Architecture & Historical Context
+- **Frontend:** Next.js (App Router), React 19, TailwindCSS v4, Framer Motion
+- **UI Components:** Radix UI primitives, Lucide Icons, Glassmorphism design system
+- **Authentication:** Clerk
+- **Database:** PostgreSQL (Supabase)
+- **ORM:** Prisma Client with `prisma/adapter-pg`
+- **Real-Time:** Supabase Realtime (WebSockets & Broadcasts)
 
-### Authentication Migration
-The project initially used Clerk for authentication but was migrated entirely to **Supabase Auth** to achieve:
-- Tighter integration between authentication and the database (Row Level Security ready).
-- Built-in OAuth providers without third-party redirection loops.
-- Elimination of complex `isLoaded` race conditions via server-side session checks (`@supabase/ssr`).
+## 🚀 Getting Started
 
-### Database Strategy
-- **Prisma via Pooler:** The application connects to Supabase using a Transaction Connection Pooler (`pgbouncer=true`) to prevent connection exhaustion in serverless environments.
-- **Data Model:** A base `profiles` table handles core user identity, while `student_profiles` and `alumni_profiles` handle role-specific data. They are linked via one-to-one relations.
-
----
-
-## 🛠️ Local Development Setup
-
-### 1. Prerequisites
-- Node.js (v18+)
+### Prerequisites
+- Node.js (v20+)
 - npm or pnpm
+- Supabase Account
+- Clerk Account
 
-### 2. Environment Variables
-Create a `.env` file in the root of your project. You will need a Supabase project.
+### Installation
 
-```env
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/alum-sphere.git
+   cd alum-sphere
+   ```
 
-# Prisma Database Connections
-# (Found in Supabase Database Settings -> Connection String -> URI -> Transaction mode)
-DATABASE_URL="postgresql://postgres.xxx:password@aws-0-pooler.supabase.com:6543/postgres?pgbouncer=true"
+2. **Install Dependencies**
+   ```bash
+   npm install
+   ```
 
-# (Direct connection for Prisma migrations, usually port 5432)
-DIRECT_URL="postgresql://postgres.xxx:password@aws-0-pooler.supabase.com:5432/postgres"
-```
+3. **Configure Environment Variables**
+   Create a `.env` file in the root directory and add your credentials:
+   ```env
+   # Clerk Auth
+   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_pub_key
+   CLERK_SECRET_KEY=your_clerk_secret_key
 
-### 3. Database Initialization
-This project uses Prisma. To sync the schema with your database, run:
-```bash
-npx prisma generate
-npx prisma db push
-```
-*(Note: There is a `supabase_schema.sql` file in the repository for reference, but Prisma acts as the source of truth for the application layer.)*
+   # Supabase Realtime & Storage
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
-### 4. Run the Development Server
-Start the Next.js development server using Turbopack for maximum compilation speed:
-```bash
-npm run dev
-```
+   # Prisma Postgres Pool
+   DATABASE_URL=your_transaction_pool_url
+   DIRECT_URL=your_session_pool_url
+   ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. **Run Prisma Migrations**
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   ```
 
----
+5. **Start the Development Server**
+   ```bash
+   npm run dev
+   ```
 
-## 📂 Project Structure
+## 🏗️ Architecture Notes
 
-- `/app`: Next.js App Router pages, layouts, and API routes.
-  - `/app/api`: Backend API endpoints (e.g., matching logic, connection requests).
-  - `/app/actions`: Next.js Server Actions for secure data mutation (e.g., saving profiles).
-  - `/app/setup`: The multi-step onboarding wizard for new users.
-  - `/app/dashboard`: Role-specific interfaces for students and alumni.
-- `/components`: Reusable React components (shadcn UI, layout elements, modals).
-- `/lib`: Utility functions, database singletons, and Supabase client initializers.
-- `/prisma`: Database schema definition (`schema.prisma`).
+- **Optimized Network Fetching:** The dashboards employ debounced WebSocket listeners to consolidate rapid real-time database changes into a single smooth server fetch.
+- **Bypassing RLS with Prisma:** The backend securely writes to Postgres via Prisma Server Actions, side-stepping public RLS friction while still populating Postgres logical replication logs.
+- **Broadcast Delivery:** Client-side WebSockets use Supabase Broadcast for high-speed chat delivery directly between connected browsers.
 
----
-
-## 🔒 Security Notes
-- The `.env` file and `supabase_schema.sql` (if it contains sensitive keys) are excluded via `.gitignore`.
-- Next.js Middleware (`middleware.ts`) actively intercepts requests to ensure `/dashboard` and `/setup` paths are only accessible to authenticated users with valid Supabase session cookies.
+## 🤝 Contributing
+Contributions, issues, and feature requests are welcome. Feel free to check the issues page.
