@@ -215,9 +215,6 @@ export default function DashboardLayout({ children, role }: DashboardLayoutProps
               onClick={() => setIsNotificationsOpen(true)}
             >
               <Bell className="h-5 w-5" />
-              <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-primary text-primary-foreground font-semibold text-[10px] animate-bounce">
-                5
-              </Badge>
             </Button>
 
             {/* User Dropdown */}
