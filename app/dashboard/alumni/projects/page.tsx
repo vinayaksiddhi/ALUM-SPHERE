@@ -196,6 +196,7 @@ export default function AlumniProjectsPage() {
                       project={{
                         id: project.id,
                         student: project.author,
+                        authorId: project.authorId,
                         avatar: "/placeholder.svg",
                         title: project.title,
                         description: project.description,
