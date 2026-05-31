@@ -17,7 +17,10 @@ interface ProjectCardProps {
     collaborators: number
     likes: number
     author?: string
+    authorId?: string
     createdAt?: string
+    githubUrl?: string | null
+    liveUrl?: string | null
   }
   showEdit?: boolean
   showAuthor?: boolean
@@ -27,6 +30,7 @@ export default function ProjectCard({ project, showEdit, showAuthor }: ProjectCa
   const router = useRouter()
   const [likes, setLikes] = useState(project.likes)
   const [hasLiked, setHasLiked] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false)
 
   const handleLike = () => {
     if (hasLiked) {
@@ -38,6 +42,50 @@ export default function ProjectCard({ project, showEdit, showAuthor }: ProjectCa
     }
   }
 
+  const handleConnect = async (actionText: string) => {
+    if (!project.authorId) {
+      import("sonner").then((mod) => mod.toast.error("Cannot connect", { description: "Project owner not found." }))
+      return
+    }
+    setIsConnecting(true)
+    try {
+      const { sendConnectionRequest } = await import("@/app/actions/connection-request")
+      const res = await sendConnectionRequest(project.authorId)
+      
+      import("sonner").then((mod) => {
+        if (res.success) {
+          mod.toast.success(`${actionText} Request Sent!`, {
+            description: `We've sent a connection request to ${project.author || "the owner"}.`
+          })
+        } else {
+          if (res.message?.includes("already exists")) {
+             mod.toast.info("Already Connected", { description: "You are already connected or have a pending request. Go to Messages to chat!" })
+          } else {
+             mod.toast.error("Failed to send request", { description: res.message })
+          }
+        }
+      })
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  const handleView = () => {
+    if (project.liveUrl) {
+      window.open(project.liveUrl, "_blank")
+    } else if (project.githubUrl) {
+      window.open(project.githubUrl, "_blank")
+    } else {
+      import("sonner").then((mod) => {
+        mod.toast.info("No Link Provided", {
+          description: "This project has not linked a GitHub repository or live deployment."
+        })
+      })
+    }
+  }
+
   return (
     <div className="h-full p-5 rounded-xl bg-card border border-border hover:border-secondary/50 transition-all hover:shadow-lg flex flex-col">
       <div className="flex items-start justify-between mb-3">
@@ -45,14 +93,14 @@ export default function ProjectCard({ project, showEdit, showAuthor }: ProjectCa
         <Badge
           variant="outline"
           className={
-            project.status === "In Progress"
+            project.status === "In Progress" || project.status === "IN_PROGRESS"
               ? "bg-accent/10 text-accent border-accent/20"
-              : project.status === "Completed"
+              : project.status === "Completed" || project.status === "COMPLETED"
                 ? "bg-secondary/10 text-secondary border-secondary/20"
                 : "bg-primary/10 text-primary border-primary/20"
           }
         >
-          {project.status}
+          {project.status.replace(/_/g, " ")}
         </Badge>
       </div>
 
@@ -87,7 +135,7 @@ export default function ProjectCard({ project, showEdit, showAuthor }: ProjectCa
           <div className="flex items-center gap-3 text-muted-foreground">
             <div className="flex items-center gap-1">
               <Users className="h-4 w-4" />
-              {project.collaborators}
+              {project.collaborators || 1}
             </div>
             <button
               onClick={handleLike}
@@ -115,7 +163,7 @@ export default function ProjectCard({ project, showEdit, showAuthor }: ProjectCa
                 variant="outline"
                 size="sm"
                 className="flex-1 gap-2 bg-transparent"
-                onClick={() => router.push(`/dashboard/student/projects/${project.id}`)}
+                onClick={handleView}
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 View
@@ -127,12 +175,18 @@ export default function ProjectCard({ project, showEdit, showAuthor }: ProjectCa
                 variant="outline"
                 size="sm"
                 className="flex-1 gap-2 bg-transparent"
-                onClick={() => alert("Discussion feature coming soon!")}
+                disabled={isConnecting}
+                onClick={() => handleConnect("Discussion")}
               >
                 <MessageSquare className="h-3.5 w-3.5" />
                 Discuss
               </Button>
-              <Button size="sm" className="flex-1 gap-2" onClick={() => alert("Collaboration request sent!")}>
+              <Button 
+                size="sm" 
+                className="flex-1 gap-2" 
+                disabled={isConnecting}
+                onClick={() => handleConnect("Collaboration")}
+              >
                 <Users className="h-3.5 w-3.5" />
                 Collaborate
               </Button>
