@@ -122,6 +122,8 @@ model projects {
   description   String
   tech_stack    String[]        @default([])
   status        project_status? @default(IN_PROGRESS)
+  github_url    String?
+  live_url      String?
   created_at    DateTime?       @default(now()) @db.Timestamptz(6)
   updated_at    DateTime?       @default(now()) @db.Timestamptz(6)
   project_likes project_likes[]
