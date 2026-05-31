@@ -127,9 +127,11 @@ export async function getDiscoverProjects() {
         description: p.description,
         techStack: p.tech_stack || [],
         status: p.status === "COMPLETED" ? "Completed" : p.status === "LOOKING_FOR_CONTRIBUTORS" ? "Looking for Contributors" : "In Progress",
-        collaborators: 1, // Can be extended with a collaborators table in future
+        githubUrl: p.github_url || null,
+        liveUrl: p.live_url || null,
         likes: p.project_likes.length,
         author: p.profiles?.name || "Anonymous",
+        authorId: p.owner_id,
         createdAt: relativeTime,
       }
     })
@@ -141,7 +143,7 @@ export async function getDiscoverProjects() {
   }
 }
 
-export async function createProject(title: string, description: string, techStack: string[], status: "IN_PROGRESS" | "LOOKING_FOR_CONTRIBUTORS" | "COMPLETED") {
+export async function createProject(title: string, description: string, techStack: string[], status: "IN_PROGRESS" | "LOOKING_FOR_CONTRIBUTORS" | "COMPLETED", githubUrl?: string, liveUrl?: string) {
   try {
     const supabase = await createSupabaseServerClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -165,12 +167,59 @@ export async function createProject(title: string, description: string, techStac
         description,
         tech_stack: techStack,
         status,
+        github_url: githubUrl || null,
+        live_url: liveUrl || null
       }
     })
 
     return { success: true, project: newProject }
   } catch (error: any) {
     console.error("createProject error:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function updateProject(projectId: string, title: string, description: string, techStack: string[], status: "IN_PROGRESS" | "LOOKING_FOR_CONTRIBUTORS" | "COMPLETED", githubUrl?: string, liveUrl?: string) {
+  try {
+    const supabase = await createSupabaseServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return { success: false, error: "Unauthorized" }
+    }
+
+    const profile = await db.profiles.findUnique({
+      where: { clerk_id: user.id }
+    })
+
+    if (!profile) {
+      return { success: false, error: "Profile not found" }
+    }
+
+    const existingProject = await db.projects.findUnique({
+      where: { id: projectId }
+    })
+
+    if (!existingProject || existingProject.owner_id !== profile.id) {
+      return { success: false, error: "Unauthorized to edit this project" }
+    }
+
+    const updatedProject = await db.projects.update({
+      where: { id: projectId },
+      data: {
+        title,
+        description,
+        tech_stack: techStack,
+        status,
+        github_url: githubUrl || null,
+        live_url: liveUrl || null,
+        updated_at: new Date()
+      }
+    })
+
+    return { success: true, project: updatedProject }
+  } catch (error: any) {
+    console.error("updateProject error:", error)
     return { success: false, error: error.message }
   }
 }
@@ -292,6 +341,30 @@ export async function likeQuestion(questionId: string) {
     }
   } catch (error: any) {
     console.error("likeQuestion error:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getProjectById(projectId: string) {
+  try {
+    const supabase = await createSupabaseServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return { success: false, error: "Unauthorized" }
+    }
+
+    const project = await db.projects.findUnique({
+      where: { id: projectId }
+    })
+
+    if (!project) {
+      return { success: false, error: "Project not found" }
+    }
+
+    return { success: true, project }
+  } catch (error: any) {
+    console.error("getProjectById error:", error)
     return { success: false, error: error.message }
   }
 }
