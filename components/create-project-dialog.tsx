@@ -50,7 +50,7 @@ export default function CreateProjectDialog({ open, onOpenChange, onSuccess }: C
         backendStatus = "LOOKING_FOR_CONTRIBUTORS"
       }
 
-      const res = await createProject(title, description, techStack, backendStatus)
+      const res = await createProject(title, description, techStack, backendStatus, githubUrl, liveUrl)
       if (res.success) {
         toast.success("Project shared successfully!")
         onOpenChange(false)
